@@ -1,0 +1,382 @@
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+    color: #1f2937;
+    background: #f4f7fb;
+}
+
+a {
+    color: inherit;
+    text-decoration: none;
+}
+
+.preloader {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    background: #ffffff;
+    transition: opacity 0.9s ease, visibility 0.9s ease;
+}
+
+.preloader--hidden {
+    opacity: 0;
+    visibility: hidden;
+}
+
+.preloader__halo {
+    position: absolute;
+    width: 210px;
+    height: 210px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(18, 52, 77, 0.08) 0%, rgba(18, 52, 77, 0.03) 45%, rgba(255, 255, 255, 0) 72%);
+    animation: preloaderPulse 2.6s ease-in-out infinite;
+}
+
+.preloader__logo-wrap {
+    position: relative;
+    width: 122px;
+    height: 122px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: #ffffff;
+    box-shadow: 0 10px 30px rgba(18, 52, 77, 0.12);
+}
+
+.preloader__logo {
+    width: 96px;
+    height: 96px;
+    object-fit: cover;
+    border-radius: 50%;
+    animation: preloaderFloat 2.6s ease-in-out infinite;
+}
+
+.preloader__brand {
+    position: relative;
+    margin: 0;
+    font-size: 2rem;
+    font-weight: 700;
+    color: #12344d;
+}
+
+@keyframes preloaderPulse {
+    0%,
+    100% {
+        transform: scale(0.9);
+        opacity: 0.65;
+    }
+
+    50% {
+        transform: scale(1.05);
+        opacity: 1;
+    }
+}
+
+@keyframes preloaderFloat {
+    0%,
+    100% {
+        transform: translateY(0);
+    }
+
+    50% {
+        transform: translateY(-4px);
+    }
+}
+
+.navbar {
+    background: #12344d;
+    color: #ffffff;
+}
+
+.navbar__inner {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 0.7rem 1.1rem 0.7rem 0.75rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.navbar__brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.7rem;
+    font-weight: 700;
+}
+
+.navbar__brand span {
+    font-size: 0.98rem;
+    line-height: 1;
+}
+
+.navbar__logo {
+    width: 46px;
+    height: 46px;
+    object-fit: cover;
+    object-position: center;
+    border-radius: 50%;
+    background: #ffffff;
+    padding: 0.08rem;
+    transform: scale(1.1);
+    transform-origin: center;
+}
+
+.navbar__menu {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.navbar__link {
+    padding: 0.5rem 0.8rem;
+    border-radius: 999px;
+    transition: background-color 0.2s ease;
+}
+
+.navbar__link:hover {
+    background: rgba(255, 255, 255, 0.14);
+}
+
+.navbar__welcome {
+    margin: 0;
+    font-size: 0.95rem;
+    color: #dbeafe;
+}
+
+.page-shell {
+    min-height: calc(100vh - 72px);
+    display: grid;
+    place-items: start center;
+    padding: 3rem 1.5rem;
+}
+
+.auth-panel,
+.welcome-panel {
+    width: min(100%, 520px);
+    background: #ffffff;
+    border-radius: 20px;
+    padding: 2rem;
+    box-shadow: 0 20px 45px rgba(18, 52, 77, 0.12);
+}
+
+.welcome-panel {
+    text-align: center;
+}
+
+.welcome-panel h1 {
+    margin: 0 0 1.5rem;
+    font-size: clamp(1.8rem, 4vw, 2.5rem);
+    color: #0f172a;
+}
+
+.auth-panel__switch {
+    display: inline-flex;
+    padding: 0.3rem;
+    border-radius: 999px;
+    background: #e2e8f0;
+    margin-bottom: 1.5rem;
+}
+
+.auth-tab {
+    padding: 0.7rem 1.2rem;
+    border-radius: 999px;
+    font-weight: 700;
+    color: #475569;
+}
+
+.auth-tab--active {
+    background: #12344d;
+    color: #ffffff;
+}
+
+.auth-heading {
+    margin-bottom: 1.5rem;
+}
+
+.auth-heading h1 {
+    margin: 0;
+    font-size: 2rem;
+    color: #0f172a;
+}
+
+.auth-heading p {
+    margin: 0.55rem 0 0;
+    color: #475569;
+    line-height: 1.6;
+}
+
+.auth-form {
+    display: grid;
+    gap: 1rem;
+}
+
+.auth-form__field {
+    display: grid;
+    gap: 0.45rem;
+    text-align: left;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.auth-form__field input {
+    width: 100%;
+    padding: 0.9rem 1rem;
+    border: 1px solid #cbd5e1;
+    border-radius: 12px;
+    font: inherit;
+}
+
+.password-field {
+    position: relative;
+}
+
+.password-field input {
+    padding-right: 4.25rem;
+}
+
+.password-toggle {
+    position: absolute;
+    top: 50%;
+    right: 0.6rem;
+    width: 2.6rem;
+    height: 2.6rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transform: translateY(-50%);
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: #64748b;
+    cursor: pointer;
+}
+
+.password-toggle:hover {
+    background: #eff6ff;
+    color: #2563eb;
+}
+
+.password-toggle__icon {
+    width: 1.2rem;
+    height: 1.2rem;
+    display: inline-flex;
+}
+
+.password-toggle__icon svg {
+    width: 100%;
+    height: 100%;
+}
+
+.auth-form__field input:focus {
+    outline: 2px solid #93c5fd;
+    border-color: #2563eb;
+}
+
+.auth-message {
+    margin: 0 0 1rem;
+    padding: 0.9rem 1rem;
+    border-radius: 12px;
+    font-weight: 600;
+}
+
+.auth-message--error {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.auth-message--error p {
+    margin: 0;
+}
+
+.auth-message--error p + p {
+    margin-top: 0.45rem;
+}
+
+.auth-message--success {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 150px;
+    padding: 0.85rem 1.2rem;
+    border-radius: 999px;
+    font-weight: 700;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    border: 0;
+    cursor: pointer;
+    font: inherit;
+}
+
+.button:hover {
+    transform: translateY(-1px);
+}
+
+.button--primary {
+    background: #2563eb;
+    color: #ffffff;
+    box-shadow: 0 10px 24px rgba(37, 99, 235, 0.24);
+}
+
+.button--secondary {
+    background: #12344d;
+    color: #ffffff;
+}
+
+@media (max-width: 700px) {
+    .preloader__halo {
+        width: 170px;
+        height: 170px;
+    }
+
+    .preloader__logo-wrap {
+        width: 104px;
+        height: 104px;
+    }
+
+    .preloader__logo {
+        width: 82px;
+        height: 82px;
+    }
+
+    .preloader__brand {
+        font-size: 1.7rem;
+    }
+
+    .navbar__inner {
+        flex-direction: column;
+        align-items: flex-start;
+        padding-left: 1rem;
+        padding-right: 1rem;
+    }
+
+    .navbar__menu {
+        width: 100%;
+    }
+
+    .auth-panel,
+    .welcome-panel {
+        width: 100%;
+        padding: 1.5rem 1.25rem;
+    }
+
+    .button {
+        width: 100%;
+    }
+}
