@@ -32,3 +32,56 @@ try {
 } catch (PDOException $e) {
    die('Database connection failed: ' . $e->getMessage());
 }
+
+function tableExists(PDO $pdo, string $tableName): bool
+{
+    static $knownTables = [];
+
+    if (array_key_exists($tableName, $knownTables)) {
+        return $knownTables[$tableName];
+    }
+
+    $stmt = $pdo->prepare('SHOW TABLES LIKE :table_name');
+    $stmt->execute([':table_name' => $tableName]);
+
+    $knownTables[$tableName] = $stmt->fetchColumn() !== false;
+
+    return $knownTables[$tableName];
+}
+
+function countRows(PDO $pdo, string $tableName): int
+{
+    if (!tableExists($pdo, $tableName)) {
+        return 0;
+    }
+
+    return (int) $pdo->query("SELECT COUNT(*) FROM {$tableName}")->fetchColumn();
+}
+
+function columnExists(PDO $pdo, string $tableName, string $columnName): bool
+{
+    static $knownColumns = [];
+    $cacheKey = $tableName . '.' . $columnName;
+
+    if (array_key_exists($cacheKey, $knownColumns)) {
+        return $knownColumns[$cacheKey];
+    }
+
+    if (!tableExists($pdo, $tableName)) {
+        $knownColumns[$cacheKey] = false;
+        return false;
+    }
+
+    $stmt = $pdo->prepare(
+        'SELECT COUNT(*) FROM information_schema.COLUMNS
+         WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :table_name AND COLUMN_NAME = :column_name'
+    );
+    $stmt->execute([
+        ':table_name' => $tableName,
+        ':column_name' => $columnName,
+    ]);
+
+    $knownColumns[$cacheKey] = (int) $stmt->fetchColumn() > 0;
+
+    return $knownColumns[$cacheKey];
+}

@@ -1,4 +1,5 @@
 <?php
+
 require_once __DIR__ . '/includes/navbar.php';
 require_once __DIR__ . '/includes/db.php';
 
@@ -29,8 +30,12 @@ if (!$isLoggedIn && $_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['user_id'] = $user['id'];
             $_SESSION['role'] = $user['role'];
             $_SESSION['username'] = $user['username'];
-            $redirectPath = $user['role'] === 'admin' ? 'admin/dashboard.php' : 'modules/dashboard.php';
-            header('Location: ' . $redirectPath);
+
+            $redirect = $user['role'] === 'admin'
+                ? 'admin/dashboard.php'
+                : 'modules/dashboard.php';
+
+            header('Location: ' . $redirect);
             exit;
         }
 
@@ -97,7 +102,7 @@ if (isset($_GET['registered']) && $_GET['registered'] === '1') {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Candidate Tracking System</title>
-    <link rel="stylesheet" href="assets/css/style.css">
+    <link rel="stylesheet" href="assets/CSS/style.css">
 </head>
 <body>
     <div class="preloader" id="preloader" aria-hidden="true">
