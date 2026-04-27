@@ -1,218 +1,231 @@
 <?php
-$pageTitle = 'Διαχείριση Χρηστών';
-require_once __DIR__ . '/../includes/auth.php';
+
+require_once __DIR__ . '/../includes/admin.php';
+
 requireAdmin();
-require_once __DIR__ . '/../config/database.php';
 
-$db = getDB();
-$action  = $_GET['action'] ?? 'list';
 $message = '';
-$error   = '';
+$error = '';
+$editId = isset($_GET['edit']) ? (int) $_GET['edit'] : 0;
+$search = trim($_GET['search'] ?? '');
 
-// Handle POST actions
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    if (!csrf_verify($_POST['csrf_token'] ?? '')) { $error = 'Μη έγκυρο αίτημα.'; goto done; }
+    $action = $_POST['action'] ?? '';
+    $username = trim($_POST['username'] ?? '');
+    $email = trim($_POST['email'] ?? '');
+    $role = ($_POST['role'] ?? 'user') === 'admin' ? 'admin' : 'user';
+    $password = $_POST['password'] ?? '';
 
-    $act = $_POST['action'] ?? '';
-
-    if ($act === 'add' || $act === 'update') {
-        $email    = trim($_POST['email'] ?? '');
-        $fname    = trim($_POST['first_name'] ?? '');
-        $lname    = trim($_POST['last_name'] ?? '');
-        $phone    = trim($_POST['phone'] ?? '');
-        $role     = in_array($_POST['role'], ['admin','candidate']) ? $_POST['role'] : 'candidate';
-        $password = trim($_POST['password'] ?? '');
-
-        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) { $error = 'Μη έγκυρο email.'; goto done; }
-
-        if ($act === 'add') {
-            if (strlen($password) < 6) { $error = 'Ο κωδικός πρέπει να είναι τουλάχιστον 6 χαρακτήρες.'; goto done; }
-            $stmt = $db->prepare("INSERT INTO users (email, password_hash, role, first_name, last_name, phone, is_active, email_verified) VALUES (?,?,?,?,?,?,1,1)");
-            try {
-                $stmt->execute([$email, hashPassword($password), $role, $fname, $lname, $phone]);
-                logAudit($_SESSION['user_id'], 'user_create', 'user', $db->lastInsertId());
-                $message = 'Ο χρήστης δημιουργήθηκε επιτυχώς.';
-            } catch (PDOException $e) {
-                $error = 'Το email υπάρχει ήδη.';
-            }
+    if ($action === 'create' || $action === 'update') {
+        if ($username === '' || $email === '') {
+            $error = 'Username and email are required.';
+        } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $error = 'Please enter a valid email address.';
+        } elseif ($action === 'create' && strlen($password) < 8) {
+            $error = 'Password must be at least 8 characters.';
         } else {
-            $id = (int)($_POST['user_id'] ?? 0);
-            $sql = "UPDATE users SET email=?, first_name=?, last_name=?, phone=?, role=? WHERE id=?";
-            $params = [$email, $fname, $lname, $phone, $role, $id];
-            if ($password) { $sql = "UPDATE users SET email=?, first_name=?, last_name=?, phone=?, role=?, password_hash=? WHERE id=?"; $params = [$email, $fname, $lname, $phone, $role, hashPassword($password), $id]; }
-            $db->prepare($sql)->execute($params);
-            logAudit($_SESSION['user_id'], 'user_update', 'user', $id);
-            $message = 'Ο χρήστης ενημερώθηκε.';
+            try {
+                if ($action === 'create') {
+                    $stmt = $pdo->prepare(
+                        'INSERT INTO users (username, email, password_hash, role) VALUES (:username, :email, :password_hash, :role)'
+                    );
+                    $stmt->execute([
+                        ':username' => $username,
+                        ':email' => $email,
+                        ':password_hash' => password_hash($password, PASSWORD_DEFAULT),
+                        ':role' => $role,
+                    ]);
+                    $message = 'User created successfully.';
+                } else {
+                    $userId = (int) ($_POST['user_id'] ?? 0);
+                    if ($password !== '') {
+                        $stmt = $pdo->prepare(
+                            'UPDATE users SET username = :username, email = :email, role = :role, password_hash = :password_hash WHERE id = :id'
+                        );
+                        $stmt->execute([
+                            ':username' => $username,
+                            ':email' => $email,
+                            ':role' => $role,
+                            ':password_hash' => password_hash($password, PASSWORD_DEFAULT),
+                            ':id' => $userId,
+                        ]);
+                    } else {
+                        $stmt = $pdo->prepare(
+                            'UPDATE users SET username = :username, email = :email, role = :role WHERE id = :id'
+                        );
+                        $stmt->execute([
+                            ':username' => $username,
+                            ':email' => $email,
+                            ':role' => $role,
+                            ':id' => $userId,
+                        ]);
+                    }
+                    $message = 'User updated successfully.';
+                    $editId = 0;
+                }
+            } catch (PDOException $exception) {
+                $error = 'Username or email already exists.';
+            }
         }
-        $action = 'list';
     }
 
-    if ($act === 'delete') {
-        $id = (int)($_POST['user_id'] ?? 0);
-        if ($id === (int)$_SESSION['user_id']) { $error = 'Δεν μπορείτε να διαγράψετε τον εαυτό σας.'; goto done; }
-        $db->prepare("DELETE FROM users WHERE id=?")->execute([$id]);
-        logAudit($_SESSION['user_id'], 'user_delete', 'user', $id);
-        $message = 'Ο χρήστης διαγράφηκε.';
-        $action = 'list';
-    }
-
-    if ($act === 'toggle') {
-        $id = (int)($_POST['user_id'] ?? 0);
-        $db->prepare("UPDATE users SET is_active = NOT is_active WHERE id=?")->execute([$id]);
-        $message = 'Η κατάσταση ενημερώθηκε.';
-        $action = 'list';
+    if ($action === 'delete') {
+        $userId = (int) ($_POST['user_id'] ?? 0);
+        if ($userId === (int) ($_SESSION['user_id'] ?? 0)) {
+            $error = 'You cannot delete your own admin account.';
+        } else {
+            $pdo->prepare('DELETE FROM candidates WHERE user_id = :user_id')->execute([':user_id' => $userId]);
+            $pdo->prepare('DELETE FROM users WHERE id = :id')->execute([':id' => $userId]);
+            $message = 'User deleted successfully.';
+        }
     }
 }
-done:
 
-// Fetch user for edit
 $editUser = null;
-if ($action === 'edit' && isset($_GET['id'])) {
-    $stmt = $db->prepare("SELECT * FROM users WHERE id=?");
-    $stmt->execute([(int)$_GET['id']]);
+if ($editId > 0) {
+    $stmt = $pdo->prepare('SELECT id, username, email, role FROM users WHERE id = :id');
+    $stmt->execute([':id' => $editId]);
     $editUser = $stmt->fetch();
 }
 
-// Fetch users list
-$page  = max(1, (int)($_GET['p'] ?? 1));
-$limit = ITEMS_PER_PAGE;
-$offset= ($page - 1) * $limit;
-$q     = trim($_GET['q'] ?? '');
-$where = $q ? "WHERE (email LIKE ? OR first_name LIKE ? OR last_name LIKE ?)" : "";
-$params = $q ? ["%$q%","%$q%","%$q%"] : [];
-$total = $db->prepare("SELECT COUNT(*) FROM users $where");
-$total->execute($params);
-$totalRows = $total->fetchColumn();
-$totalPages= ceil($totalRows / $limit);
-$stmt = $db->prepare("SELECT * FROM users $where ORDER BY created_at DESC LIMIT $limit OFFSET $offset");
+$query = '
+    SELECT
+        users.id,
+        users.username,
+        users.email,
+        users.role,
+        users.created_at,
+        COUNT(candidates.id) AS candidate_records
+    FROM users
+    LEFT JOIN candidates ON candidates.user_id = users.id
+';
+
+$params = [];
+if ($search !== '') {
+    $query .= ' WHERE users.username LIKE :search OR users.email LIKE :search ';
+    $params[':search'] = '%' . $search . '%';
+}
+
+$query .= ' GROUP BY users.id, users.username, users.email, users.role, users.created_at ORDER BY users.created_at DESC';
+$stmt = $pdo->prepare($query);
 $stmt->execute($params);
 $users = $stmt->fetchAll();
+
+adminPageStart('Manage Users');
 ?>
-<?php include __DIR__ . '/../includes/header.php'; ?>
 
-<div class="page-hero">
-    <div class="container">
-        <div class="breadcrumb"><a href="/pinakes/admin/index.php">Admin</a><span class="breadcrumb-sep">›</span><span>Manage Users</span></div>
-        <h1>👥 Διαχείριση Χρηστών</h1>
-        <p>Προβολή και διαχείριση εγγεγραμμένων χρηστών.</p>
-    </div>
-</div>
-
-<section class="section-gap">
-    <div class="container">
-        <?php if ($message): ?><div class="alert alert-success" data-dismiss="4000"><?= sanitize($message) ?></div><?php endif; ?>
-        <?php if ($error):   ?><div class="alert alert-danger"  data-dismiss="5000"><?= sanitize($error)   ?></div><?php endif; ?>
-
-        <!-- Add/Edit Form -->
-        <?php if ($action === 'add' || $action === 'edit'): ?>
-        <div class="card mb-4">
-            <div class="card-header"><h3><?= $action === 'add' ? '➕ Νέος Χρήστης' : '✏️ Επεξεργασία Χρήστη' ?></h3></div>
-            <div class="card-body">
-                <form method="POST">
-                    <input type="hidden" name="csrf_token" value="<?= csrf_token() ?>">
-                    <input type="hidden" name="action" value="<?= $action === 'edit' ? 'update' : 'add' ?>">
-                    <?php if ($editUser): ?><input type="hidden" name="user_id" value="<?= $editUser['id'] ?>"><?php endif; ?>
-                    <div class="grid-2">
-                        <div class="form-group">
-                            <label class="form-label">Όνομα</label>
-                            <input type="text" name="first_name" class="form-control" value="<?= sanitize($editUser['first_name'] ?? '') ?>" required>
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">Επίθετο</label>
-                            <input type="text" name="last_name" class="form-control" value="<?= sanitize($editUser['last_name'] ?? '') ?>" required>
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">Email</label>
-                            <input type="email" name="email" class="form-control" value="<?= sanitize($editUser['email'] ?? '') ?>" required>
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">Τηλέφωνο</label>
-                            <input type="text" name="phone" class="form-control" value="<?= sanitize($editUser['phone'] ?? '') ?>">
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">Ρόλος</label>
-                            <select name="role" class="form-control">
-                                <option value="candidate" <?= ($editUser['role'] ?? '') === 'candidate' ? 'selected' : '' ?>>Υποψήφιος</option>
-                                <option value="admin"     <?= ($editUser['role'] ?? '') === 'admin'     ? 'selected' : '' ?>>Διαχειριστής</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">Κωδικός <?= $action === 'edit' ? '(αφήστε κενό για να μην αλλάξει)' : '' ?></label>
-                            <input type="password" name="password" class="form-control" <?= $action === 'add' ? 'required minlength="6"' : '' ?> placeholder="••••••••">
-                        </div>
-                    </div>
-                    <div class="d-flex gap-2">
-                        <button type="submit" class="btn btn-primary"><?= $action === 'edit' ? 'Αποθήκευση' : 'Δημιουργία' ?></button>
-                        <a href="/pinakes/admin/users.php" class="btn btn-ghost">Ακύρωση</a>
-                    </div>
-                </form>
-            </div>
+<main class="admin-page">
+    <section class="admin-hero admin-hero--tight">
+        <div>
+            <p class="admin-eyebrow">Manage Users</p>
+            <h1>Registered Users</h1>
+            <p>Add, update or remove users through a simple admin form.</p>
         </div>
-        <?php endif; ?>
+    </section>
 
-        <!-- Filters -->
-        <div class="card">
-            <div class="card-header">
-                <h3>Χρήστες (<?= $totalRows ?>)</h3>
-                <a href="/pinakes/admin/users.php?action=add" class="btn btn-primary btn-sm">➕ Νέος</a>
+    <?php if ($message !== ''): ?>
+        <div class="admin-alert admin-alert--success"><?php echo h($message); ?></div>
+    <?php endif; ?>
+
+    <?php if ($error !== ''): ?>
+        <div class="admin-alert admin-alert--error"><?php echo h($error); ?></div>
+    <?php endif; ?>
+
+    <section class="admin-two-column">
+        <article class="admin-panel">
+            <div class="admin-panel__header">
+                <h2><?php echo $editUser ? 'Update User' : 'Add User'; ?></h2>
             </div>
-            <div class="card-body" style="padding-bottom:0;">
-                <form method="GET" class="d-flex gap-2 mb-3">
-                    <input type="text" name="q" class="form-control" placeholder="Αναζήτηση χρήστη..." value="<?= sanitize($q) ?>" style="max-width:300px;">
-                    <button type="submit" class="btn btn-primary btn-sm">Αναζήτηση</button>
-                    <?php if ($q): ?><a href="/pinakes/admin/users.php" class="btn btn-ghost btn-sm">✕</a><?php endif; ?>
+            <form class="admin-form" method="post">
+                <input type="hidden" name="action" value="<?php echo $editUser ? 'update' : 'create'; ?>">
+                <?php if ($editUser): ?>
+                    <input type="hidden" name="user_id" value="<?php echo (int) $editUser['id']; ?>">
+                <?php endif; ?>
+
+                <label>
+                    <span>Username</span>
+                    <input type="text" name="username" value="<?php echo h($editUser['username'] ?? ''); ?>" required>
+                </label>
+
+                <label>
+                    <span>Email</span>
+                    <input type="email" name="email" value="<?php echo h($editUser['email'] ?? ''); ?>" required>
+                </label>
+
+                <label>
+                    <span>Role</span>
+                    <select name="role">
+                        <option value="user" <?php echo (($editUser['role'] ?? 'user') === 'user') ? 'selected' : ''; ?>>User</option>
+                        <option value="admin" <?php echo (($editUser['role'] ?? '') === 'admin') ? 'selected' : ''; ?>>Admin</option>
+                    </select>
+                </label>
+
+                <label>
+                    <span><?php echo $editUser ? 'New Password (optional)' : 'Password'; ?></span>
+                    <input type="password" name="password" <?php echo $editUser ? '' : 'required minlength="8"'; ?>>
+                </label>
+
+                <div class="admin-form__actions">
+                    <button class="button button--primary" type="submit"><?php echo $editUser ? 'Save Changes' : 'Create User'; ?></button>
+                    <?php if ($editUser): ?>
+                        <a class="button button--secondary" href="<?php echo h(getProjectBasePath() . '/admin/users.php'); ?>">Cancel</a>
+                    <?php endif; ?>
+                </div>
+            </form>
+        </article>
+
+        <article class="admin-panel">
+            <div class="admin-panel__header">
+                <h2>User List</h2>
+                <form class="admin-search" method="get">
+                    <input type="text" name="search" placeholder="Search username or email" value="<?php echo h($search); ?>">
+                    <button class="button button--secondary" type="submit">Search</button>
                 </form>
             </div>
-            <div class="table-wrapper">
-                <table class="data-table">
-                    <thead><tr>
-                        <th>#</th><th>Όνομα</th><th>Email</th><th>Ρόλος</th><th>Κατάσταση</th><th>Εγγραφή</th><th>Ενέργειες</th>
-                    </tr></thead>
+
+            <div class="admin-table-wrap">
+                <table class="admin-table">
+                    <thead>
+                        <tr>
+                            <th>Username</th>
+                            <th>Email</th>
+                            <th>Role</th>
+                            <th>Candidate Records</th>
+                            <th>Created</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
                     <tbody>
-                    <?php foreach ($users as $u): ?>
-                    <tr>
-                        <td><?= $u['id'] ?></td>
-                        <td><?= sanitize($u['first_name'] . ' ' . $u['last_name']) ?></td>
-                        <td><?= sanitize($u['email']) ?></td>
-                        <td><span class="badge <?= $u['role'] === 'admin' ? 'badge-blue' : 'badge-gray' ?>"><?= $u['role'] === 'admin' ? 'Admin' : 'Υποψήφιος' ?></span></td>
-                        <td><span class="badge <?= $u['is_active'] ? 'badge-green' : 'badge-red' ?>"><?= $u['is_active'] ? 'Ενεργός' : 'Ανενεργός' ?></span></td>
-                        <td class="text-small text-muted"><?= date('d/m/Y', strtotime($u['created_at'])) ?></td>
-                        <td>
-                            <div class="d-flex gap-1">
-                                <a href="/pinakes/admin/users.php?action=edit&id=<?= $u['id'] ?>" class="btn btn-ghost btn-sm">✏️</a>
-                                <form method="POST" style="display:inline">
-                                    <input type="hidden" name="csrf_token" value="<?= csrf_token() ?>">
-                                    <input type="hidden" name="action" value="toggle">
-                                    <input type="hidden" name="user_id" value="<?= $u['id'] ?>">
-                                    <button type="submit" class="btn btn-ghost btn-sm" title="<?= $u['is_active'] ? 'Απενεργοποίηση' : 'Ενεργοποίηση' ?>"><?= $u['is_active'] ? '🔒' : '🔓' ?></button>
-                                </form>
-                                <?php if ($u['id'] !== (int)$_SESSION['user_id']): ?>
-                                <form method="POST" style="display:inline" onsubmit="return confirm('Διαγραφή χρήστη;')">
-                                    <input type="hidden" name="csrf_token" value="<?= csrf_token() ?>">
-                                    <input type="hidden" name="action" value="delete">
-                                    <input type="hidden" name="user_id" value="<?= $u['id'] ?>">
-                                    <button type="submit" class="btn btn-danger btn-sm">🗑</button>
-                                </form>
-                                <?php endif; ?>
-                            </div>
-                        </td>
-                    </tr>
-                    <?php endforeach; ?>
-                    <?php if (empty($users)): ?><tr><td colspan="7" class="text-center text-muted" style="padding:2rem">Δεν βρέθηκαν χρήστες</td></tr><?php endif; ?>
+                        <?php if (empty($users)): ?>
+                            <tr>
+                                <td colspan="6">No users found.</td>
+                            </tr>
+                        <?php endif; ?>
+
+                        <?php foreach ($users as $user): ?>
+                            <tr>
+                                <td><?php echo h($user['username']); ?></td>
+                                <td><?php echo h($user['email']); ?></td>
+                                <td><?php echo h(ucfirst($user['role'])); ?></td>
+                                <td><?php echo (int) $user['candidate_records']; ?></td>
+                                <td><?php echo h(date('d/m/Y', strtotime($user['created_at']))); ?></td>
+                                <td class="admin-table__actions">
+                                    <a class="admin-link-button" href="<?php echo h(getProjectBasePath() . '/admin/users.php?edit=' . (int) $user['id']); ?>">Edit</a>
+                                    <?php if ((int) $user['id'] !== (int) ($_SESSION['user_id'] ?? 0)): ?>
+                                        <form method="post" onsubmit="return confirm('Delete this user?');">
+                                            <input type="hidden" name="action" value="delete">
+                                            <input type="hidden" name="user_id" value="<?php echo (int) $user['id']; ?>">
+                                            <button class="admin-link-button admin-link-button--danger" type="submit">Delete</button>
+                                        </form>
+                                    <?php endif; ?>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
                     </tbody>
                 </table>
             </div>
-            <?php if ($totalPages > 1): ?>
-            <div class="card-footer">
-                <nav class="pagination">
-                    <?php for ($i = 1; $i <= $totalPages; $i++): ?>
-                        <a href="?p=<?= $i ?><?= $q ? '&q='.urlencode($q) : '' ?>" class="page-btn <?= $i === $page ? 'active' : '' ?>"><?= $i ?></a>
-                    <?php endfor; ?>
-                </nav>
-            </div>
-            <?php endif; ?>
-        </div>
-    </div>
-</section>
+        </article>
+    </section>
+</main>
 
-<?php include __DIR__ . '/../includes/footer.php'; ?>
+<?php adminPageEnd(); ?>
