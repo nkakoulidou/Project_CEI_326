@@ -11,7 +11,7 @@ function getProjectBasePath(): string
     $position = strpos($scriptName, $needle);
 
     if ($position === false) {
-        return '/project-root';
+        return '';
     }
 
     return substr($scriptName, 0, $position) . '/project-root';
@@ -35,7 +35,6 @@ function renderNavbar(): void
     } elseif ($role === 'admin') {
         $links[] = ['label' => 'Dashboard', 'href' => $basePath . '/admin/dashboard.php'];
         $links[] = ['label' => 'Manage Users', 'href' => $basePath . '/admin/users.php'];
-        $links[] = ['label' => 'Manage Lists', 'href' => $basePath . '/admin/manage_lists/manage_lists.php'];
         $links[] = ['label' => 'Logout', 'href' => $basePath . '/auth/logout.php'];
     } else {
         $links[] = ['label' => 'Dashboard', 'href' => $basePath . '/modules/dashboard.php'];
