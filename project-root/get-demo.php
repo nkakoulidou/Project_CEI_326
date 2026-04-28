@@ -1,15 +1,14 @@
 <?php
 
-$keyword=$_GET['keyword'];
-$year=(int)$_GET['year'];
-$role=$_GET['role'];
+$keyword = trim($_GET['keyword'] ?? '');
+$year = (int) ($_GET['year'] ?? 0);
+$role = trim($_GET['role'] ?? '');
 
-if($keyword === '' || $year === 0 || $role === ''){
-    echo"";
-    exit
+if ($keyword === '' || $year === 0 || $role === '') {
+    echo '';
+    exit;
 }
 
-echo "keyword:".keyword."<br>";
-echo "year:".year."<br>";
-echo "role:".role."<br>";
-
+echo 'keyword:' . htmlspecialchars($keyword, ENT_QUOTES, 'UTF-8') . '<br>';
+echo 'year:' . $year . '<br>';
+echo 'role:' . htmlspecialchars($role, ENT_QUOTES, 'UTF-8') . '<br>';

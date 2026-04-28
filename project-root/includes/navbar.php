@@ -10,11 +10,11 @@ function getProjectBasePath(): string
     $needle = '/project-root/';
     $position = strpos($scriptName, $needle);
 
-    if ($position === false) {
-        return '';
+    if ($position !== false) {
+        return substr($scriptName, 0, $position) . '/project-root';
     }
 
-    return substr($scriptName, 0, $position) . '/project-root';
+    return str_starts_with($scriptName, '/project-root') ? '/project-root' : '';
 }
 
 function renderNavbar(): void
@@ -40,7 +40,9 @@ function renderNavbar(): void
         $links[] = ['label' => 'Profile', 'href' => $basePath . '/admin/profile.php'];
         $links[] = ['label' => 'Logout', 'href' => $basePath . '/auth/logout.php'];
     } else {
-        $links[] = ['label' => 'Dashboard', 'href' => $basePath . '/modules/dashboard.php'];
+        $links[] = ['label' => 'My Profile', 'href' => $basePath . '/modules/profile.php'];
+        $links[] = ['label' => 'Track My Applications', 'href' => $basePath . '/modules/list.php'];
+        $links[] = ['label' => 'Track Others', 'href' => $basePath . '/modules/track-others.php'];
         $links[] = ['label' => 'Logout', 'href' => $basePath . '/auth/logout.php'];
     }
     ?>

@@ -1,0 +1,113 @@
+<?php
+require_once '../includes/candidate.php';
+
+$userId = requireCandidateLogin();
+$message = '';
+$search = trim($_GET['search'] ?? '');
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $action = $_POST['action'] ?? '';
+    $candidateId = (int) ($_POST['candidate_id'] ?? 0);
+
+    if ($action === 'track' && $candidateId > 0) {
+        addTrackedCandidate($pdo, $userId, $candidateId);
+        $message = 'Candidate added to your tracking list.';
+    }
+
+    if ($action === 'untrack' && $candidateId > 0) {
+        removeTrackedCandidate($pdo, $userId, $candidateId);
+        $message = 'Candidate removed from your tracking list.';
+    }
+}
+
+$results = searchCandidates($pdo, $userId, $search);
+$trackedCandidates = fetchTrackedCandidates($pdo, $userId);
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Track Others</title>
+    <link rel="stylesheet" href="../assets/css/style.css">
+</head>
+<body>
+    <?php renderNavbar(); ?>
+
+    <main class="admin-page">
+        <?php if ($message !== ''): ?>
+            <div class="admin-alert admin-alert--success"><?php echo htmlspecialchars($message, ENT_QUOTES, 'UTF-8'); ?></div>
+        <?php endif; ?>
+
+        <section class="admin-two-column">
+            <article class="admin-panel">
+                <div class="admin-panel__header">
+                    <h2>Find Candidates</h2>
+                </div>
+                <div class="candidate-panel-body">
+                    <form class="admin-search" method="get">
+                        <input type="text" name="search" value="<?php echo htmlspecialchars($search, ENT_QUOTES, 'UTF-8'); ?>" placeholder="Search by first name, last name or specialty">
+                        <button class="button button--primary" type="submit">Search</button>
+                    </form>
+
+                    <div class="candidate-results">
+                        <?php if (empty($results)): ?>
+                            <p class="admin-empty">No candidates matched your search.</p>
+                        <?php endif; ?>
+
+                        <?php foreach ($results as $row): ?>
+                            <article class="candidate-result-card">
+                                <div>
+                                    <h3><?php echo htmlspecialchars($row['first_name'] . ' ' . $row['last_name'], ENT_QUOTES, 'UTF-8'); ?></h3>
+                                    <p><?php echo htmlspecialchars($row['specialty'] ?? 'No specialty', ENT_QUOTES, 'UTF-8'); ?></p>
+                                    <p>Ranking: <?php echo htmlspecialchars(isset($row['ranking']) ? (string) $row['ranking'] : 'N/A', ENT_QUOTES, 'UTF-8'); ?></p>
+                                </div>
+                                <form method="post">
+                                    <input type="hidden" name="candidate_id" value="<?php echo (int) $row['id']; ?>">
+                                    <?php if ((int) $row['is_tracked'] === 1): ?>
+                                        <input type="hidden" name="action" value="untrack">
+                                        <button class="admin-link-button admin-link-button--danger" type="submit">Untrack</button>
+                                    <?php else: ?>
+                                        <input type="hidden" name="action" value="track">
+                                        <button class="admin-link-button" type="submit">Track</button>
+                                    <?php endif; ?>
+                                </form>
+                            </article>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+            </article>
+
+            <article class="admin-panel">
+                <div class="admin-panel__header">
+                    <h2>Tracked Candidates</h2>
+                </div>
+                <div class="candidate-panel-body">
+                    <?php if (empty($trackedCandidates)): ?>
+                        <p class="admin-empty">You are not tracking any candidates yet.</p>
+                    <?php endif; ?>
+
+                    <div class="candidate-results">
+                        <?php foreach ($trackedCandidates as $tracked): ?>
+                            <article class="candidate-result-card candidate-result-card--stacked">
+                                <div>
+                                    <h3><?php echo htmlspecialchars($tracked['first_name'] . ' ' . $tracked['last_name'], ENT_QUOTES, 'UTF-8'); ?></h3>
+                                    <p><?php echo htmlspecialchars($tracked['specialty'] ?? 'No specialty', ENT_QUOTES, 'UTF-8'); ?></p>
+                                </div>
+                                <div class="candidate-meta">
+                                    <span class="candidate-badge"><?php echo htmlspecialchars($tracked['academic_year'] ?? 'No year', ENT_QUOTES, 'UTF-8'); ?></span>
+                                    <span class="candidate-badge candidate-badge--status"><?php echo htmlspecialchars($tracked['current_status'] ?? 'No status', ENT_QUOTES, 'UTF-8'); ?></span>
+                                </div>
+                                <p class="candidate-timeline"><?php echo htmlspecialchars($tracked['timeline_note'] ?? 'No timeline notes yet.', ENT_QUOTES, 'UTF-8'); ?></p>
+                                <p class="candidate-subtle">
+                                    <?php echo htmlspecialchars($tracked['service_title'] ?? 'Service not assigned', ENT_QUOTES, 'UTF-8'); ?>
+                                </p>
+                            </article>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+            </article>
+        </section>
+    </main>
+</body>
+</html>

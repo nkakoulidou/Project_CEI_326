@@ -1,49 +1,17 @@
 <?php
-session_start();
-require_once '../includes/navbar.php';
-require_once '../includes/db.php';
+require_once '../includes/candidate.php';
 
-if (!isset($_SESSION['user_id'])) {
-    header('Location: ../index.php?form=login');
-    exit;
-}
-
+$userId = requireCandidateLogin();
 $keyword = trim($_GET['keyword'] ?? '');
-$sql = '
-    SELECT
-        applications.application_code,
-        applications.current_status,
-        applications.timeline_note,
-        applications.submitted_at,
-        lists.academic_year,
-        services.title AS service_title,
-        services.category,
-        services.district
-    FROM applications
-    INNER JOIN lists ON lists.id = applications.list_id
-    INNER JOIN services ON services.id = lists.service_id
-    INNER JOIN candidates ON candidates.id = applications.candidate_id
-    WHERE candidates.user_id = :user_id
-';
+$rows = fetchCandidateApplications($pdo, $userId, $keyword);
 
-$params = [':user_id' => $_SESSION['user_id']];
-
-if ($keyword !== '') {
-    $sql .= '
-        AND (
-            applications.application_code LIKE :keyword
-            OR services.title LIKE :keyword
-            OR services.category LIKE :keyword
-            OR services.district LIKE :keyword
-        )
-    ';
-    $params[':keyword'] = '%' . $keyword . '%';
-}
-
-$sql .= ' ORDER BY applications.submitted_at DESC';
-$stmt = $pdo->prepare($sql);
-$stmt->execute($params);
-$rows = $stmt->fetchAll();
+$statusLabels = [
+    'submitted' => 'Submitted',
+    'under_review' => 'Under Review',
+    'approved' => 'Approved',
+    'rejected' => 'Rejected',
+    'appointed' => 'Appointed',
+];
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -56,7 +24,7 @@ $rows = $stmt->fetchAll();
 <body>
     <?php renderNavbar(); ?>
 
-    <main class="page-shell">
+    <main class="admin-page">
         <section class="admin-panel">
             <div class="admin-panel__header">
                 <div>
@@ -65,7 +33,20 @@ $rows = $stmt->fetchAll();
                 </div>
             </div>
 
-            <section class="admin-card">
+            <section class="candidate-panel-body">
+                <div class="admin-stats-grid candidate-stats-grid">
+                    <article class="admin-stat-card">
+                        <span>Total Applications</span>
+                        <strong><?php echo count($rows); ?></strong>
+                    </article>
+                    <article class="admin-stat-card">
+                        <span>Latest Status</span>
+                        <strong class="admin-stat-card__compact">
+                            <?php echo htmlspecialchars($statusLabels[$rows[0]['current_status'] ?? ''] ?? 'No status', ENT_QUOTES, 'UTF-8'); ?>
+                        </strong>
+                    </article>
+                </div>
+
                 <form class="admin-search" method="get" action="">
                     <input
                         type="text"
@@ -106,12 +87,31 @@ $rows = $stmt->fetchAll();
                                     <td><?php echo htmlspecialchars($row['category'], ENT_QUOTES, 'UTF-8'); ?></td>
                                     <td><?php echo htmlspecialchars($row['district'], ENT_QUOTES, 'UTF-8'); ?></td>
                                     <td><?php echo htmlspecialchars($row['academic_year'], ENT_QUOTES, 'UTF-8'); ?></td>
-                                    <td><?php echo htmlspecialchars($row['current_status'], ENT_QUOTES, 'UTF-8'); ?></td>
+                                    <td><?php echo htmlspecialchars($statusLabels[$row['current_status']] ?? $row['current_status'], ENT_QUOTES, 'UTF-8'); ?></td>
                                     <td><?php echo htmlspecialchars($row['timeline_note'] ?? '', ENT_QUOTES, 'UTF-8'); ?></td>
                                 </tr>
                             <?php endforeach; ?>
                         </tbody>
                     </table>
+                </div>
+
+                <div class="candidate-results">
+                    <?php foreach ($rows as $row): ?>
+                        <article class="candidate-result-card candidate-result-card--stacked">
+                            <div class="candidate-meta">
+                                <span class="candidate-badge"><?php echo htmlspecialchars($row['application_code'], ENT_QUOTES, 'UTF-8'); ?></span>
+                                <span class="candidate-badge candidate-badge--status"><?php echo htmlspecialchars($statusLabels[$row['current_status']] ?? $row['current_status'], ENT_QUOTES, 'UTF-8'); ?></span>
+                            </div>
+                            <h3><?php echo htmlspecialchars($row['service_title'], ENT_QUOTES, 'UTF-8'); ?></h3>
+                            <p class="candidate-subtle">
+                                <?php echo htmlspecialchars($row['category'] . ' | ' . $row['district'] . ' | ' . $row['academic_year'], ENT_QUOTES, 'UTF-8'); ?>
+                            </p>
+                            <p class="candidate-timeline"><?php echo htmlspecialchars($row['timeline_note'] ?: 'Your application is being monitored by the system. Updates will appear here as the status changes.', ENT_QUOTES, 'UTF-8'); ?></p>
+                            <p class="candidate-subtle">
+                                Submitted on <?php echo htmlspecialchars(date('d/m/Y H:i', strtotime($row['submitted_at'])), ENT_QUOTES, 'UTF-8'); ?>
+                            </p>
+                        </article>
+                    <?php endforeach; ?>
                 </div>
             </section>
         </section>

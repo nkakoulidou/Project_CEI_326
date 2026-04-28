@@ -4,145 +4,192 @@ require_once __DIR__ . '/../includes/admin.php';
 
 requireAdmin();
 
-$message = '';
-$error = '';
-$adminId = (int) ($_SESSION['user_id'] ?? 0);
+$totals = [
+    'users' => countRows($pdo, 'users'),
+    'admins' => tableExists($pdo, 'users')
+        ? (int) $pdo->query("SELECT COUNT(*) FROM users WHERE role = 'admin'")->fetchColumn()
+        : 0,
+    'lists' => countRows($pdo, 'committee_lists'),
+    'candidates' => countRows($pdo, 'candidates'),
+];
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $action = $_POST['action'] ?? '';
+$averageAge = null;
 
-    if ($action === 'update_profile') {
-        $username = trim($_POST['username'] ?? '');
-        $email = trim($_POST['email'] ?? '');
+if (tableExists($pdo, 'candidates') && columnExists($pdo, 'candidates', 'birth_date')) {
+    $averageAge = $pdo->query(
+        'SELECT ROUND(AVG(TIMESTAMPDIFF(YEAR, birth_date, CURDATE())), 1) FROM candidates WHERE birth_date IS NOT NULL'
+    )->fetchColumn();
+}
 
-        if ($username === '' || $email === '') {
-            $error = 'Username and email are required.';
-        } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-            $error = 'Please enter a valid email address.';
-        } else {
-            try {
-                $stmt = $pdo->prepare('UPDATE users SET username = :username, email = :email WHERE id = :id');
-                $stmt->execute([
-                    ':username' => $username,
-                    ':email' => $email,
-                    ':id' => $adminId,
-                ]);
-                $_SESSION['username'] = $username;
-                $message = 'Profile details updated successfully.';
-            } catch (PDOException $exception) {
-                $error = 'This username or email is already in use.';
-            }
-        }
-    }
+$specialtyStats = [];
 
-    if ($action === 'change_password') {
-        $currentPassword = $_POST['current_password'] ?? '';
-        $newPassword = $_POST['new_password'] ?? '';
-        $confirmPassword = $_POST['confirm_password'] ?? '';
-
-        $stmt = $pdo->prepare('SELECT password_hash FROM users WHERE id = :id');
-        $stmt->execute([':id' => $adminId]);
-        $passwordHash = $stmt->fetchColumn();
-
-        if (!$passwordHash || !password_verify($currentPassword, $passwordHash)) {
-            $error = 'Current password is incorrect.';
-        } elseif (strlen($newPassword) < 8) {
-            $error = 'New password must be at least 8 characters.';
-        } elseif ($newPassword !== $confirmPassword) {
-            $error = 'The new passwords do not match.';
-        } else {
-            $stmt = $pdo->prepare('UPDATE users SET password_hash = :password_hash WHERE id = :id');
-            $stmt->execute([
-                ':password_hash' => password_hash($newPassword, PASSWORD_DEFAULT),
-                ':id' => $adminId,
-            ]);
-            $message = 'Password changed successfully.';
-        }
+if (tableExists($pdo, 'candidates') && columnExists($pdo, 'candidates', 'specialty')) {
+    if (
+        tableExists($pdo, 'committee_lists') &&
+        tableExists($pdo, 'specialties') &&
+        columnExists($pdo, 'candidates', 'committee_list_id') &&
+        columnExists($pdo, 'committee_lists', 'specialty_id')
+    ) {
+        $specialtyStats = $pdo->query(
+            "SELECT
+                COALESCE(NULLIF(specialties.name, ''), NULLIF(candidates.specialty, ''), 'Unassigned') AS specialty_name,
+                COUNT(candidates.id) AS total_candidates
+             FROM candidates
+             LEFT JOIN committee_lists ON committee_lists.id = candidates.committee_list_id
+             LEFT JOIN specialties ON specialties.id = committee_lists.specialty_id
+             GROUP BY specialty_name
+             ORDER BY total_candidates DESC, specialty_name ASC"
+        )->fetchAll();
+    } else {
+        $specialtyStats = $pdo->query(
+            "SELECT
+                COALESCE(NULLIF(specialty, ''), 'Unassigned') AS specialty_name,
+                COUNT(id) AS total_candidates
+             FROM candidates
+             GROUP BY specialty_name
+             ORDER BY total_candidates DESC, specialty_name ASC"
+        )->fetchAll();
     }
 }
 
-$stmt = $pdo->prepare('SELECT username, email, role, created_at FROM users WHERE id = :id');
-$stmt->execute([':id' => $adminId]);
-$admin = $stmt->fetch();
+$yearlyStats = tableExists($pdo, 'candidates') && columnExists($pdo, 'candidates', 'application_year')
+    ? $pdo->query(
+        'SELECT application_year, COUNT(*) AS total_candidates
+         FROM candidates
+         WHERE application_year IS NOT NULL
+         GROUP BY application_year
+         ORDER BY application_year ASC'
+    )->fetchAll()
+    : [];
 
-adminPageStart('Admin Profile');
+$specialtyChart = [];
+foreach ($specialtyStats as $row) {
+    $specialtyChart[] = [
+        'label' => $row['specialty_name'],
+        'value' => (int) $row['total_candidates'],
+    ];
+}
+
+$yearChart = [];
+foreach ($yearlyStats as $row) {
+    $yearChart[] = [
+        'label' => (string) $row['application_year'],
+        'value' => (int) $row['total_candidates'],
+    ];
+}
+
+adminPageStart('Reports');
 ?>
 
 <main class="admin-page">
     <section class="admin-hero admin-hero--tight">
         <div>
-            <p class="admin-eyebrow">Profile</p>
-            <h1>Admin Account Settings</h1>
-            <p>Update your basic details and change your password from this page.</p>
+            <p class="admin-eyebrow">Reports</p>
+            <h1>Statistics Dashboard</h1>
+            <p>Summary cards and simple charts for specialties, candidate ages and yearly activity.</p>
         </div>
     </section>
 
-    <?php if ($message !== ''): ?>
-        <div class="admin-alert admin-alert--success"><?php echo h($message); ?></div>
-    <?php endif; ?>
-
-    <?php if ($error !== ''): ?>
-        <div class="admin-alert admin-alert--error"><?php echo h($error); ?></div>
-    <?php endif; ?>
+    <section class="admin-stats-grid">
+        <article class="admin-stat-card">
+            <span>Total Users</span>
+            <strong><?php echo $totals['users']; ?></strong>
+        </article>
+        <article class="admin-stat-card">
+            <span>Admin Accounts</span>
+            <strong><?php echo $totals['admins']; ?></strong>
+        </article>
+        <article class="admin-stat-card">
+            <span>Committee Lists</span>
+            <strong><?php echo $totals['lists']; ?></strong>
+        </article>
+        <article class="admin-stat-card">
+            <span>Average Candidate Age</span>
+            <strong><?php echo h($averageAge !== null ? (string) $averageAge : 'N/A'); ?></strong>
+        </article>
+    </section>
 
     <section class="admin-two-column">
         <article class="admin-panel">
             <div class="admin-panel__header">
-                <h2>Basic Information</h2>
+                <h2>Candidates Per Specialty</h2>
             </div>
-            <form class="admin-form" method="post">
-                <input type="hidden" name="action" value="update_profile">
-
-                <label>
-                    <span>Username</span>
-                    <input type="text" name="username" value="<?php echo h($admin['username'] ?? ''); ?>" required>
-                </label>
-
-                <label>
-                    <span>Email</span>
-                    <input type="email" name="email" value="<?php echo h($admin['email'] ?? ''); ?>" required>
-                </label>
-
-                <label>
-                    <span>Role</span>
-                    <input type="text" value="<?php echo h(ucfirst($admin['role'] ?? 'admin')); ?>" disabled>
-                </label>
-
-                <label>
-                    <span>Account Created</span>
-                    <input type="text" value="<?php echo h(isset($admin['created_at']) ? date('d/m/Y', strtotime($admin['created_at'])) : ''); ?>" disabled>
-                </label>
-
-                <button class="button button--primary" type="submit">Save Profile</button>
-            </form>
+            <div class="admin-chart" id="specialty-chart" data-chart='<?php echo h(json_encode($specialtyChart, JSON_UNESCAPED_UNICODE)); ?>'></div>
         </article>
 
         <article class="admin-panel">
             <div class="admin-panel__header">
-                <h2>Change Password</h2>
+                <h2>New Candidates Per Year</h2>
             </div>
-            <form class="admin-form" method="post">
-                <input type="hidden" name="action" value="change_password">
-
-                <label>
-                    <span>Current Password</span>
-                    <input type="password" name="current_password" required>
-                </label>
-
-                <label>
-                    <span>New Password</span>
-                    <input type="password" name="new_password" minlength="8" required>
-                </label>
-
-                <label>
-                    <span>Confirm New Password</span>
-                    <input type="password" name="confirm_password" minlength="8" required>
-                </label>
-
-                <button class="button button--secondary" type="submit">Update Password</button>
-            </form>
+            <div class="admin-chart" id="year-chart" data-chart='<?php echo h(json_encode($yearChart, JSON_UNESCAPED_UNICODE)); ?>'></div>
         </article>
     </section>
+
+    <section class="admin-panel">
+        <div class="admin-panel__header">
+            <h2>Detailed Figures</h2>
+        </div>
+        <div class="admin-table-wrap">
+            <table class="admin-table">
+                <thead>
+                    <tr>
+                        <th>Metric</th>
+                        <th>Value</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Total candidates</td>
+                        <td><?php echo $totals['candidates']; ?></td>
+                    </tr>
+                    <tr>
+                        <td>Average candidate age</td>
+                        <td><?php echo h($averageAge !== null ? (string) $averageAge . ' years' : 'Not enough data'); ?></td>
+                    </tr>
+                    <?php foreach ($specialtyStats as $row): ?>
+                        <tr>
+                            <td><?php echo h($row['specialty_name']); ?></td>
+                            <td><?php echo (int) $row['total_candidates']; ?> candidates</td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+    </section>
 </main>
+
+<script>
+    function renderSimpleChart(containerId) {
+        var chart = document.getElementById(containerId);
+        if (!chart) {
+            return;
+        }
+
+        var raw = chart.getAttribute('data-chart');
+        if (!raw) {
+            chart.innerHTML = '<p class="admin-empty">No data available.</p>';
+            return;
+        }
+
+        var items = JSON.parse(raw);
+        if (!items.length) {
+            chart.innerHTML = '<p class="admin-empty">No data available.</p>';
+            return;
+        }
+
+        var max = Math.max.apply(null, items.map(function (item) { return item.value; })) || 1;
+        chart.innerHTML = items.map(function (item) {
+            var width = Math.max((item.value / max) * 100, item.value > 0 ? 12 : 0);
+            return '<div class="admin-chart__row">' +
+                '<span class="admin-chart__label">' + item.label + '</span>' +
+                '<div class="admin-chart__track"><span class="admin-chart__bar" style="width:' + width + '%"></span></div>' +
+                '<strong class="admin-chart__value">' + item.value + '</strong>' +
+                '</div>';
+        }).join('');
+    }
+
+    renderSimpleChart('specialty-chart');
+    renderSimpleChart('year-chart');
+</script>
 
 <?php adminPageEnd(); ?>

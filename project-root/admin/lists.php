@@ -6,80 +6,92 @@ requireAdmin();
 
 $message = '';
 $error = '';
+$editId = isset($_GET['edit']) ? (int) $_GET['edit'] : 0;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
 
-    if ($action === 'add_specialty') {
-        $name = trim($_POST['name'] ?? '');
-        $description = trim($_POST['description'] ?? '');
-        $isSelected = isset($_POST['is_selected']) ? 1 : 0;
+    if ($action === 'create' || $action === 'update') {
+        $serviceId = (int) ($_POST['service_id'] ?? 0);
+        $academicYear = trim($_POST['academic_year'] ?? '');
+        $publicationDate = trim($_POST['publication_date'] ?? '');
+        $status = $_POST['status'] ?? 'draft';
+        $notes = trim($_POST['notes'] ?? '');
 
-        if ($name === '') {
-            $error = 'Specialty name is required.';
+        $allowedStatuses = ['draft', 'published', 'archived'];
+        if ($serviceId <= 0 || $academicYear === '' || $publicationDate === '') {
+            $error = 'Service, academic year and publication date are required.';
+        } elseif (!in_array($status, $allowedStatuses, true)) {
+            $error = 'Invalid list status selected.';
         } else {
-            try {
+            if ($action === 'create') {
                 $stmt = $pdo->prepare(
-                    'INSERT INTO specialties (name, description, is_selected) VALUES (:name, :description, :is_selected)'
+                    'INSERT INTO lists (service_id, academic_year, publication_date, status, notes)
+                     VALUES (:service_id, :academic_year, :publication_date, :status, :notes)'
                 );
                 $stmt->execute([
-                    ':name' => $name,
-                    ':description' => $description !== '' ? $description : null,
-                    ':is_selected' => $isSelected,
+                    ':service_id' => $serviceId,
+                    ':academic_year' => $academicYear,
+                    ':publication_date' => $publicationDate,
+                    ':status' => $status,
+                    ':notes' => $notes !== '' ? $notes : null,
                 ]);
-                $message = 'Specialty added successfully.';
-            } catch (PDOException $exception) {
-                $error = 'This specialty already exists.';
+                $message = 'List created successfully.';
+            } else {
+                $listId = (int) ($_POST['list_id'] ?? 0);
+                $stmt = $pdo->prepare(
+                    'UPDATE lists
+                     SET service_id = :service_id, academic_year = :academic_year, publication_date = :publication_date,
+                         status = :status, notes = :notes
+                     WHERE id = :id'
+                );
+                $stmt->execute([
+                    ':service_id' => $serviceId,
+                    ':academic_year' => $academicYear,
+                    ':publication_date' => $publicationDate,
+                    ':status' => $status,
+                    ':notes' => $notes !== '' ? $notes : null,
+                    ':id' => $listId,
+                ]);
+                $message = 'List updated successfully.';
+                $editId = 0;
             }
         }
     }
 
-    if ($action === 'toggle_specialty') {
-        $specialtyId = (int) ($_POST['specialty_id'] ?? 0);
-        $pdo->prepare('UPDATE specialties SET is_selected = IF(is_selected = 1, 0, 1) WHERE id = :id')
-            ->execute([':id' => $specialtyId]);
-        $message = 'Specialty selection updated.';
-    }
-
-    if ($action === 'add_list') {
-        $specialtyId = (int) ($_POST['specialty_id'] ?? 0);
-        $title = trim($_POST['title'] ?? '');
-        $sourceUrl = trim($_POST['source_url'] ?? '');
-        $publishedYear = (int) ($_POST['published_year'] ?? 0);
-        $candidateCount = (int) ($_POST['candidate_count'] ?? 0);
-        $notes = trim($_POST['notes'] ?? '');
-
-        if ($specialtyId <= 0 || $title === '' || $publishedYear <= 0) {
-            $error = 'Specialty, title and year are required for a list.';
-        } else {
-            $stmt = $pdo->prepare(
-                'INSERT INTO committee_lists (specialty_id, title, source_url, published_year, candidate_count, notes)
-                 VALUES (:specialty_id, :title, :source_url, :published_year, :candidate_count, :notes)'
-            );
-            $stmt->execute([
-                ':specialty_id' => $specialtyId,
-                ':title' => $title,
-                ':source_url' => $sourceUrl !== '' ? $sourceUrl : null,
-                ':published_year' => $publishedYear,
-                ':candidate_count' => max(0, $candidateCount),
-                ':notes' => $notes !== '' ? $notes : null,
-            ]);
-            $message = 'Committee list loaded successfully.';
-        }
+    if ($action === 'delete') {
+        $listId = (int) ($_POST['list_id'] ?? 0);
+        $stmt = $pdo->prepare('DELETE FROM lists WHERE id = :id');
+        $stmt->execute([':id' => $listId]);
+        $message = 'List deleted successfully.';
+        $editId = 0;
     }
 }
 
-$specialties = $pdo->query('SELECT * FROM specialties ORDER BY name ASC')->fetchAll();
-$lists = [];
+$services = $pdo->query('SELECT id, title FROM services ORDER BY title ASC')->fetchAll();
 
-if (tableExists($pdo, 'committee_lists')) {
-    $lists = $pdo->query(
-        'SELECT committee_lists.*, specialties.name AS specialty_name
-         FROM committee_lists
-         INNER JOIN specialties ON specialties.id = committee_lists.specialty_id
-         ORDER BY committee_lists.published_year DESC, committee_lists.created_at DESC'
-    )->fetchAll();
+$editList = null;
+if ($editId > 0) {
+    $stmt = $pdo->prepare('SELECT id, service_id, academic_year, publication_date, status, notes FROM lists WHERE id = :id');
+    $stmt->execute([':id' => $editId]);
+    $editList = $stmt->fetch();
 }
+
+$stmt = $pdo->query(
+    'SELECT
+        lists.id,
+        lists.academic_year,
+        lists.publication_date,
+        lists.status,
+        lists.notes,
+        services.title AS service_title,
+        services.category,
+        services.district
+     FROM lists
+     INNER JOIN services ON services.id = lists.service_id
+     ORDER BY lists.publication_date DESC, lists.id DESC'
+);
+$lists = $stmt->fetchAll();
 
 adminPageStart('Manage Lists');
 ?>
@@ -88,8 +100,8 @@ adminPageStart('Manage Lists');
     <section class="admin-hero admin-hero--tight">
         <div>
             <p class="admin-eyebrow">Manage Lists</p>
-            <h1>Specialties And Available Tables</h1>
-            <p>Select specialties and register the appointment lists that are available from the official committee source.</p>
+            <h1>Appointment Lists</h1>
+            <p>Create, update and review the published appointment lists for each service.</p>
         </div>
     </section>
 
@@ -104,121 +116,99 @@ adminPageStart('Manage Lists');
     <section class="admin-two-column">
         <article class="admin-panel">
             <div class="admin-panel__header">
-                <h2>Add Specialty</h2>
+                <h2><?php echo $editList ? 'Update List' : 'Create List'; ?></h2>
             </div>
             <form class="admin-form" method="post">
-                <input type="hidden" name="action" value="add_specialty">
-
-                <label>
-                    <span>Specialty Name</span>
-                    <input type="text" name="name" required>
-                </label>
-
-                <label>
-                    <span>Description</span>
-                    <textarea name="description" rows="3" placeholder="Optional short description"></textarea>
-                </label>
-
-                <label class="admin-checkbox">
-                    <input type="checkbox" name="is_selected" checked>
-                    <span>Include this specialty in the active set</span>
-                </label>
-
-                <button class="button button--primary" type="submit">Save Specialty</button>
-            </form>
-
-            <div class="admin-list-block">
-                <h3>Selected Specialties</h3>
-                <?php if (empty($specialties)): ?>
-                    <p class="admin-empty">No specialties available yet.</p>
+                <input type="hidden" name="action" value="<?php echo $editList ? 'update' : 'create'; ?>">
+                <?php if ($editList): ?>
+                    <input type="hidden" name="list_id" value="<?php echo (int) $editList['id']; ?>">
                 <?php endif; ?>
 
-                <?php foreach ($specialties as $specialty): ?>
-                    <div class="admin-list-item">
-                        <div>
-                            <strong><?php echo h($specialty['name']); ?></strong>
-                            <p><?php echo h($specialty['description'] ?? 'No description provided.'); ?></p>
-                        </div>
-                        <form method="post">
-                            <input type="hidden" name="action" value="toggle_specialty">
-                            <input type="hidden" name="specialty_id" value="<?php echo (int) $specialty['id']; ?>">
-                            <button class="admin-link-button" type="submit">
-                                <?php echo (int) $specialty['is_selected'] === 1 ? 'Selected' : 'Inactive'; ?>
-                            </button>
-                        </form>
-                    </div>
-                <?php endforeach; ?>
-            </div>
-        </article>
-
-        <article class="admin-panel">
-            <div class="admin-panel__header">
-                <h2>Load Available List</h2>
-            </div>
-            <form class="admin-form" method="post">
-                <input type="hidden" name="action" value="add_list">
-
                 <label>
-                    <span>Specialty</span>
-                    <select name="specialty_id" required>
-                        <option value="">Choose specialty</option>
-                        <?php foreach ($specialties as $specialty): ?>
-                            <option value="<?php echo (int) $specialty['id']; ?>"><?php echo h($specialty['name']); ?></option>
+                    <span>Service</span>
+                    <select name="service_id" required>
+                        <option value="">Select service</option>
+                        <?php foreach ($services as $service): ?>
+                            <option value="<?php echo (int) $service['id']; ?>" <?php echo ((int) ($editList['service_id'] ?? 0) === (int) $service['id']) ? 'selected' : ''; ?>>
+                                <?php echo h($service['title']); ?>
+                            </option>
                         <?php endforeach; ?>
                     </select>
                 </label>
 
                 <label>
-                    <span>List Title</span>
-                    <input type="text" name="title" required>
+                    <span>Academic Year</span>
+                    <input type="text" name="academic_year" value="<?php echo h($editList['academic_year'] ?? ''); ?>" placeholder="2025-2026" required>
                 </label>
 
                 <label>
-                    <span>Source URL</span>
-                    <input type="url" name="source_url" placeholder="https://www.eey.gov.cy/">
+                    <span>Publication Date</span>
+                    <input type="date" name="publication_date" value="<?php echo h($editList['publication_date'] ?? ''); ?>" required>
                 </label>
 
                 <label>
-                    <span>Published Year</span>
-                    <input type="number" name="published_year" min="2000" max="2100" value="<?php echo (int) date('Y'); ?>" required>
-                </label>
-
-                <label>
-                    <span>Candidate Count</span>
-                    <input type="number" name="candidate_count" min="0" value="0">
+                    <span>Status</span>
+                    <select name="status">
+                        <option value="draft" <?php echo (($editList['status'] ?? 'draft') === 'draft') ? 'selected' : ''; ?>>Draft</option>
+                        <option value="published" <?php echo (($editList['status'] ?? '') === 'published') ? 'selected' : ''; ?>>Published</option>
+                        <option value="archived" <?php echo (($editList['status'] ?? '') === 'archived') ? 'selected' : ''; ?>>Archived</option>
+                    </select>
                 </label>
 
                 <label>
                     <span>Notes</span>
-                    <textarea name="notes" rows="3" placeholder="Optional notes about the imported table"></textarea>
+                    <textarea name="notes" rows="4" placeholder="Optional notes"><?php echo h($editList['notes'] ?? ''); ?></textarea>
                 </label>
 
-                <button class="button button--primary" type="submit">Load List</button>
+                <div class="admin-form__actions">
+                    <button class="button button--primary" type="submit"><?php echo $editList ? 'Save Changes' : 'Create List'; ?></button>
+                    <?php if ($editList): ?>
+                        <a class="button button--secondary" href="<?php echo h(getProjectBasePath() . '/admin/lists.php'); ?>">Cancel</a>
+                    <?php endif; ?>
+                </div>
             </form>
+        </article>
 
-            <div class="admin-table-wrap admin-table-wrap--compact">
+        <article class="admin-panel">
+            <div class="admin-panel__header">
+                <h2>Existing Lists</h2>
+            </div>
+            <div class="admin-table-wrap">
                 <table class="admin-table">
                     <thead>
                         <tr>
-                            <th>Title</th>
-                            <th>Specialty</th>
-                            <th>Year</th>
-                            <th>Candidates</th>
+                            <th>Service</th>
+                            <th>Category</th>
+                            <th>District</th>
+                            <th>Academic Year</th>
+                            <th>Publication Date</th>
+                            <th>Status</th>
+                            <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody>
                         <?php if (empty($lists)): ?>
                             <tr>
-                                <td colspan="4">No committee lists loaded yet.</td>
+                                <td colspan="7">No lists found.</td>
                             </tr>
                         <?php endif; ?>
 
                         <?php foreach ($lists as $list): ?>
                             <tr>
-                                <td><?php echo h($list['title']); ?></td>
-                                <td><?php echo h($list['specialty_name']); ?></td>
-                                <td><?php echo (int) $list['published_year']; ?></td>
-                                <td><?php echo (int) $list['candidate_count']; ?></td>
+                                <td><?php echo h($list['service_title']); ?></td>
+                                <td><?php echo h($list['category']); ?></td>
+                                <td><?php echo h($list['district']); ?></td>
+                                <td><?php echo h($list['academic_year']); ?></td>
+                                <td><?php echo h(date('d/m/Y', strtotime($list['publication_date']))); ?></td>
+                                <td><?php echo h(ucfirst($list['status'])); ?></td>
+                                <td class="admin-table__actions">
+                                    <a class="admin-link-button" href="<?php echo h(getProjectBasePath() . '/admin/lists.php?edit=' . (int) $list['id']); ?>">Edit</a>
+                                    <form method="post" onsubmit="return confirm('Delete this list?');">
+                                        <input type="hidden" name="action" value="delete">
+                                        <input type="hidden" name="list_id" value="<?php echo (int) $list['id']; ?>">
+                                        <button class="admin-link-button admin-link-button--danger" type="submit">Delete</button>
+                                    </form>
+                                </td>
                             </tr>
                         <?php endforeach; ?>
                     </tbody>

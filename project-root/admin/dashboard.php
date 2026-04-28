@@ -6,8 +6,8 @@ requireAdmin();
 
 $stats = [
     'users' => countRows($pdo, 'users'),
-    'specialties' => countRows($pdo, 'specialties'),
-    'lists' => countRows($pdo, 'committee_lists'),
+    'services' => countRows($pdo, 'services'),
+    'lists' => countRows($pdo, 'lists'),
     'candidates' => countRows($pdo, 'candidates'),
 ];
 
@@ -21,7 +21,7 @@ $cards = [
     ],
     [
         'title' => 'Manage Lists',
-        'description' => 'Select specialties and maintain the available committee lists.',
+        'description' => 'Create and manage the available appointment lists and their service details.',
         'icon' => 'L',
         'href' => $basePath . '/admin/lists.php',
     ],
@@ -52,8 +52,8 @@ adminPageStart('Admin Dashboard');
             <strong><?php echo $stats['users']; ?></strong>
         </article>
         <article class="admin-stat-card">
-            <span>Specialties</span>
-            <strong><?php echo $stats['specialties']; ?></strong>
+            <span>Services</span>
+            <strong><?php echo $stats['services']; ?></strong>
         </article>
         <article class="admin-stat-card">
             <span>Lists</span>

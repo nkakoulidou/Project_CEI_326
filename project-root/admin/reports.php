@@ -9,7 +9,7 @@ $totals = [
     'admins' => tableExists($pdo, 'users')
         ? (int) $pdo->query("SELECT COUNT(*) FROM users WHERE role = 'admin'")->fetchColumn()
         : 0,
-    'lists' => countRows($pdo, 'committee_lists'),
+    'lists' => countRows($pdo, 'lists'),
     'candidates' => countRows($pdo, 'candidates'),
 ];
 
@@ -52,13 +52,13 @@ if (tableExists($pdo, 'candidates') && columnExists($pdo, 'candidates', 'special
     }
 }
 
-$yearlyStats = tableExists($pdo, 'candidates') && columnExists($pdo, 'candidates', 'application_year')
+$yearlyStats = tableExists($pdo, 'applications')
     ? $pdo->query(
-        'SELECT application_year, COUNT(*) AS total_candidates
-         FROM candidates
-         WHERE application_year IS NOT NULL
-         GROUP BY application_year
-         ORDER BY application_year ASC'
+        'SELECT YEAR(submitted_at) AS application_year, COUNT(*) AS total_candidates
+         FROM applications
+         WHERE submitted_at IS NOT NULL
+         GROUP BY YEAR(submitted_at)
+         ORDER BY YEAR(submitted_at) ASC'
     )->fetchAll()
     : [];
 
@@ -100,7 +100,7 @@ adminPageStart('Reports');
             <strong><?php echo $totals['admins']; ?></strong>
         </article>
         <article class="admin-stat-card">
-            <span>Committee Lists</span>
+            <span>Published Lists</span>
             <strong><?php echo $totals['lists']; ?></strong>
         </article>
         <article class="admin-stat-card">

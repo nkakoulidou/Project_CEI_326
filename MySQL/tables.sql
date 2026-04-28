@@ -79,3 +79,17 @@ CREATE TABLE tracked_candidates (
     FOREIGN KEY (candidate_id) REFERENCES candidates (id) ON DELETE CASCADE,
     UNIQUE (user_id, candidate_id)
 );
+
+
+
+CREATE TABLE applications (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    candidate_id INT NOT NULL,
+    list_id INT NOT NULL,
+    application_code VARCHAR(30) NOT NULL UNIQUE,
+    submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    current_status ENUM('submitted', 'under_review', 'approved', 'rejected', 'appointed') NOT NULL DEFAULT 'submitted',
+    timeline_note VARCHAR(255),
+    FOREIGN KEY (candidate_id) REFERENCES candidates(id) ON DELETE CASCADE,
+    FOREIGN KEY (list_id) REFERENCES lists(id) ON DELETE CASCADE
+);

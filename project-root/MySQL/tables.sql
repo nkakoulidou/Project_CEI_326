@@ -54,6 +54,18 @@ CREATE TABLE candidates (
         ON DELETE CASCADE
 );
 
+CREATE TABLE candidate_preferences (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL UNIQUE,
+    notify_new_lists TINYINT(1) NOT NULL DEFAULT 1,
+    notify_status_changes TINYINT(1) NOT NULL DEFAULT 1,
+    notify_rank_updates TINYINT(1) NOT NULL DEFAULT 0,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT fk_candidate_preferences_user
+        FOREIGN KEY (user_id) REFERENCES users(id)
+        ON DELETE CASCADE
+);
+
 CREATE TABLE list_entries (
     id INT AUTO_INCREMENT PRIMARY KEY,
     list_id INT NOT NULL,

@@ -176,110 +176,6 @@ a {
     text-align: center;
 }
 
-.admin-panel {
-    width: min(100%, 1100px);
-    display: grid;
-    gap: 1.5rem;
-}
-
-.admin-panel__header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
-    flex-wrap: wrap;
-}
-
-.admin-panel__header h1 {
-    margin: 0;
-    font-size: clamp(1.8rem, 4vw, 2.4rem);
-    color: #0f172a;
-}
-
-.admin-panel__header p {
-    margin: 0.5rem 0 0;
-    color: #475569;
-}
-
-.admin-card {
-    background: #ffffff;
-    border-radius: 20px;
-    padding: 1.5rem;
-    box-shadow: 0 20px 45px rgba(18, 52, 77, 0.12);
-}
-
-.admin-card h2 {
-    margin-top: 0;
-    color: #0f172a;
-}
-
-.admin-panel__actions {
-    display: flex;
-    gap: 0.75rem;
-    flex-wrap: wrap;
-}
-
-.admin-search {
-    display: flex;
-    gap: 0.75rem;
-    flex-wrap: wrap;
-    margin-bottom: 1rem;
-}
-
-.admin-search input,
-.admin-select {
-    width: 100%;
-    padding: 0.9rem 1rem;
-    border: 1px solid #cbd5e1;
-    border-radius: 12px;
-    font: inherit;
-    background: #ffffff;
-}
-
-.admin-search input {
-    flex: 1 1 280px;
-}
-
-.admin-table-wrap {
-    overflow-x: auto;
-}
-
-.admin-table {
-    width: 100%;
-    border-collapse: collapse;
-}
-
-.admin-table th,
-.admin-table td {
-    padding: 1rem 0.75rem;
-    border-bottom: 1px solid #e2e8f0;
-    text-align: left;
-}
-
-.admin-table th {
-    color: #12344d;
-    font-size: 0.92rem;
-}
-
-.admin-table td {
-    color: #334155;
-}
-
-.admin-table__actions {
-    display: flex;
-    gap: 0.6rem;
-    flex-wrap: wrap;
-}
-
-.admin-table__actions form {
-    margin: 0;
-}
-
-.admin-delete {
-    background: #dc2626;
-    box-shadow: 0 10px 24px rgba(220, 38, 38, 0.2);
-}
-
 .welcome-panel h1 {
     margin: 0 0 1.5rem;
     font-size: clamp(1.8rem, 4vw, 2.5rem);
@@ -475,25 +371,13 @@ a {
     }
 
     .auth-panel,
-    .welcome-panel,
-    .admin-card {
+    .welcome-panel {
         width: 100%;
         padding: 1.5rem 1.25rem;
     }
 
     .button {
         width: 100%;
-    }
-
-    .admin-panel__header,
-    .admin-panel__actions,
-    .admin-table__actions {
-        align-items: stretch;
-    }
-
-    .admin-table th,
-    .admin-table td {
-        min-width: 130px;
     }
 }
 
@@ -579,6 +463,11 @@ a {
     margin-top: 0.45rem;
     font-size: 2rem;
     color: #0f172a;
+}
+
+.admin-stat-card__compact {
+    font-size: 1.2rem;
+    line-height: 1.4;
 }
 
 .admin-action-card {
@@ -769,6 +658,104 @@ a {
     margin: 0.35rem 0 0;
     color: #64748b;
     line-height: 1.5;
+}
+
+.candidate-panel-body {
+    padding: 1.4rem;
+    display: grid;
+    gap: 1rem;
+}
+
+.candidate-stats-grid {
+    margin-top: 0;
+}
+
+.candidate-preferences {
+    margin: 0;
+    padding: 1rem;
+    border: 1px solid #dbe4f0;
+    border-radius: 14px;
+    display: grid;
+    gap: 0.85rem;
+}
+
+.candidate-preferences legend {
+    padding: 0 0.35rem;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.candidate-check {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    color: #334155;
+    font-weight: 500;
+}
+
+.candidate-check input {
+    margin-top: 0.2rem;
+}
+
+.candidate-results {
+    display: grid;
+    gap: 1rem;
+}
+
+.candidate-result-card {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    background: #f8fafc;
+}
+
+.candidate-result-card--stacked {
+    display: grid;
+}
+
+.candidate-result-card h3,
+.candidate-result-card p {
+    margin: 0;
+}
+
+.candidate-result-card p + p {
+    margin-top: 0.35rem;
+}
+
+.candidate-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.candidate-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.35rem 0.7rem;
+    border-radius: 999px;
+    background: #dbeafe;
+    color: #1d4ed8;
+    font-size: 0.85rem;
+    font-weight: 700;
+}
+
+.candidate-badge--status {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.candidate-timeline {
+    color: #334155;
+    line-height: 1.6;
+}
+
+.candidate-subtle {
+    color: #64748b;
+    font-size: 0.95rem;
 }
 
 .admin-chart {

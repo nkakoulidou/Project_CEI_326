@@ -1,6 +1,8 @@
 <?php
 
 $envPath = dirname(__DIR__, 2) . '/.env';
+$dbConnectionError = null;
+$pdo = null;
 
 if (file_exists($envPath)) {
     $lines = file($envPath, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
@@ -18,10 +20,16 @@ if (file_exists($envPath)) {
 }
 
 try {
+    $host = $_ENV['DB_HOST'] ?? 'localhost';
+    $dbName = $_ENV['DB_NAME'] ?? '';
+    $dsn = 'mysql:host=' . $host . ';dbname=' . $dbName . ';charset=utf8mb4';
+
+    if (!empty($_ENV['DB_PORT'])) {
+        $dsn .= ';port=' . $_ENV['DB_PORT'];
+    }
+
     $pdo = new PDO(
-        'mysql:host=' . ($_ENV['DB_HOST'] ?? 'localhost') .
-        ';dbname=' . ($_ENV['DB_NAME'] ?? '') .
-        ';charset=utf8mb4',
+        $dsn,
         $_ENV['DB_USER'] ?? '',
         $_ENV['DB_PASS'] ?? '',
         [
@@ -29,8 +37,110 @@ try {
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
         ]
     );
+
+    ensureCandidateModuleSchema($pdo);
 } catch (PDOException $e) {
-   die('Database connection failed: ' . $e->getMessage());
+    $dbConnectionError = 'Database connection failed. Check your .env settings and make sure MySQL is running.';
+}
+
+function hasDatabaseConnection(): bool
+{
+    global $pdo;
+
+    return $pdo instanceof PDO;
+}
+
+function ensureCandidateModuleSchema(PDO $pdo): void
+{
+    if (tableExists($pdo, 'candidates')) {
+        $candidateColumns = [
+            'phone' => 'ALTER TABLE candidates ADD COLUMN phone VARCHAR(30) NULL AFTER ranking',
+            'district' => 'ALTER TABLE candidates ADD COLUMN district VARCHAR(100) NULL AFTER phone',
+        ];
+
+        foreach ($candidateColumns as $column => $sql) {
+            if (!columnExists($pdo, 'candidates', $column)) {
+                $pdo->exec($sql);
+            }
+        }
+    }
+
+    $pdo->exec(
+        'CREATE TABLE IF NOT EXISTS candidate_preferences (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            user_id INT NOT NULL UNIQUE,
+            notify_new_lists TINYINT(1) NOT NULL DEFAULT 1,
+            notify_status_changes TINYINT(1) NOT NULL DEFAULT 1,
+            notify_rank_updates TINYINT(1) NOT NULL DEFAULT 0,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            CONSTRAINT fk_candidate_preferences_user
+                FOREIGN KEY (user_id) REFERENCES users(id)
+                ON DELETE CASCADE
+        )'
+    );
+
+    if (tableExists($pdo, 'candidates') && tableExists($pdo, 'lists')) {
+        $pdo->exec(
+            'CREATE TABLE IF NOT EXISTS applications (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                candidate_id INT NOT NULL,
+                list_id INT NOT NULL,
+                application_code VARCHAR(30) NOT NULL UNIQUE,
+                submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                current_status ENUM(\'submitted\', \'under_review\', \'approved\', \'rejected\', \'appointed\') NOT NULL DEFAULT \'submitted\',
+                timeline_note VARCHAR(255),
+                CONSTRAINT fk_applications_candidate
+                    FOREIGN KEY (candidate_id) REFERENCES candidates(id)
+                    ON DELETE CASCADE,
+                CONSTRAINT fk_applications_list
+                    FOREIGN KEY (list_id) REFERENCES lists(id)
+                    ON DELETE CASCADE
+            )'
+        );
+
+        if (tableExists($pdo, 'list_entries')) {
+            $pdo->exec(
+                'INSERT IGNORE INTO applications (
+                    candidate_id,
+                    list_id,
+                    application_code,
+                    submitted_at,
+                    current_status,
+                    timeline_note
+                )
+                SELECT
+                    list_entries.candidate_id,
+                    list_entries.list_id,
+                    CONCAT(\'APP-\', LPAD(list_entries.id, 6, \'0\')),
+                    list_entries.created_at,
+                    CASE list_entries.status
+                        WHEN \'appointed\' THEN \'appointed\'
+                        WHEN \'removed\' THEN \'rejected\'
+                        WHEN \'pending\' THEN \'under_review\'
+                        ELSE \'submitted\'
+                    END,
+                    list_entries.remarks
+                FROM list_entries'
+            );
+        }
+    }
+
+    if (!tableExists($pdo, 'tracked_candidates') && tableExists($pdo, 'user_candidate_links')) {
+        $pdo->exec(
+            'CREATE TABLE IF NOT EXISTS tracked_candidates (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INT NOT NULL,
+                candidate_id INT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE KEY uq_tracked_candidates_user_candidate (user_id, candidate_id)
+            )'
+        );
+
+        $pdo->exec(
+            'INSERT IGNORE INTO tracked_candidates (user_id, candidate_id, created_at)
+             SELECT user_id, candidate_id, created_at FROM user_candidate_links'
+        );
+    }
 }
 
 function tableExists(PDO $pdo, string $tableName): bool

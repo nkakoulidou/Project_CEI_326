@@ -5,16 +5,15 @@ require_once __DIR__ . '/includes/db.php';
 
 $isLoggedIn = isset($_SESSION['user_id'], $_SESSION['username'], $_SESSION['role']);
 $role = $_SESSION['role'] ?? '';
-$dashboardLink = $role === 'admin' ? 'admin/dashboard.php' : 'modules/dashboard.php';
 $activeForm = $_GET['form'] ?? '';
-$loginError = '';
+$loginError = isset($_GET['login_error']) ? 'Incorrect login details.' : '';
 $registerErrors = [];
 $successMessage = '';
 $loginEmail = '';
 $registerUsername = '';
 $registerEmail = '';
 
-if (!$isLoggedIn && $_SERVER['REQUEST_METHOD'] === 'POST') {
+if (hasDatabaseConnection() && !$isLoggedIn && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $authAction = $_POST['auth_action'] ?? '';
 
     if ($authAction === 'login') {
@@ -33,7 +32,7 @@ if (!$isLoggedIn && $_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $redirect = $user['role'] === 'admin'
                 ? 'admin/dashboard.php'
-                : 'modules/dashboard.php';
+                : 'index.php';
 
             header('Location: ' . $redirect);
             exit;
@@ -102,7 +101,7 @@ if (isset($_GET['registered']) && $_GET['registered'] === '1') {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Candidate Tracking System</title>
-    <link rel="stylesheet" href="assets/CSS/style.css">
+    <link rel="stylesheet" href="assets/css/style.css">
 </head>
 <body>
     <div class="preloader" id="preloader" aria-hidden="true">
@@ -125,6 +124,10 @@ if (isset($_GET['registered']) && $_GET['registered'] === '1') {
 
                 <?php if ($successMessage !== ''): ?>
                     <p class="auth-message auth-message--success"><?php echo htmlspecialchars($successMessage, ENT_QUOTES, 'UTF-8'); ?></p>
+                <?php endif; ?>
+
+                <?php if ($dbConnectionError !== null): ?>
+                    <p class="auth-message auth-message--error"><?php echo htmlspecialchars($dbConnectionError, ENT_QUOTES, 'UTF-8'); ?></p>
                 <?php endif; ?>
 
                 <?php if ($activeForm === 'register'): ?>
@@ -188,7 +191,7 @@ if (isset($_GET['registered']) && $_GET['registered'] === '1') {
                             </div>
                         </label>
 
-                        <button class="button button--primary" type="submit">Create Account</button>
+                        <button class="button button--primary" type="submit" <?php echo $dbConnectionError !== null ? 'disabled' : ''; ?>>Create Account</button>
                     </form>
                 <?php else: ?>
                     <div class="auth-heading">
@@ -225,14 +228,13 @@ if (isset($_GET['registered']) && $_GET['registered'] === '1') {
                             </div>
                         </label>
 
-                        <button class="button button--secondary" type="submit">Sign In</button>
+                        <button class="button button--secondary" type="submit" <?php echo $dbConnectionError !== null ? 'disabled' : ''; ?>>Sign In</button>
                     </form>
                 <?php endif; ?>
             </section>
         <?php else: ?>
             <section class="welcome-panel">
                 <h1>Welcome back, <?php echo htmlspecialchars($_SESSION['username'], ENT_QUOTES, 'UTF-8'); ?></h1>
-                <a class="button button--secondary" href="<?php echo htmlspecialchars($dashboardLink, ENT_QUOTES, 'UTF-8'); ?>">Go to Dashboard</a>
             </section>
         <?php endif; ?>
     </main>
