@@ -20,12 +20,19 @@ CREATE TABLE specialties (
 
 CREATE TABLE candidates (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    first_name VARCHAR(100) NOT NULL,
-    last_name VARCHAR(100) NOT NULL,
-    birth_date DATE,
-    specialty_id INT,
+    user_id INT NOT NULL UNIQUE,
+    first_name VARCHAR(50) NOT NULL,
+    last_name VARCHAR(50) NOT NULL,
+    birth_date DATE NULL,
+    identity_number VARCHAR(20) NOT NULL UNIQUE,
+    phone VARCHAR(30),
+    district VARCHAR(100),
+    specialty VARCHAR(100),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (specialty_id) REFERENCES specialties (id) ON DELETE SET NULL
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT fk_candidates_user
+        FOREIGN KEY (user_id) REFERENCES users(id)
+        ON DELETE CASCADE
 );
 
 CREATE INDEX idx_candidate_name ON candidates (first_name, last_name);

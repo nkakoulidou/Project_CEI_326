@@ -6,7 +6,7 @@ require_once __DIR__ . '/includes/db.php';
 $isLoggedIn = isset($_SESSION['user_id'], $_SESSION['username'], $_SESSION['role']);
 $role = $_SESSION['role'] ?? '';
 $activeForm = $_GET['form'] ?? '';
-$loginError = isset($_GET['login_error']) ? 'Incorrect login details.' : '';
+$loginError = isset($_GET['login_error']) ? t('auth.error.incorrect_login') : '';
 $registerErrors = [];
 $successMessage = '';
 $loginEmail = '';
@@ -38,7 +38,7 @@ if (hasDatabaseConnection() && !$isLoggedIn && $_SERVER['REQUEST_METHOD'] === 'P
             exit;
         }
 
-        $loginError = 'Incorrect login details.';
+        $loginError = t('auth.error.incorrect_login');
     }
 
     if ($authAction === 'register') {
@@ -49,19 +49,19 @@ if (hasDatabaseConnection() && !$isLoggedIn && $_SERVER['REQUEST_METHOD'] === 'P
         $confirm = $_POST['confirm'] ?? '';
 
         if ($registerUsername === '') {
-            $registerErrors[] = 'Username is required.';
+            $registerErrors[] = t('auth.error.username_required');
         }
 
         if (!filter_var($registerEmail, FILTER_VALIDATE_EMAIL)) {
-            $registerErrors[] = 'Enter a valid email address.';
+            $registerErrors[] = t('auth.error.valid_email');
         }
 
         if (strlen($password) < 8) {
-            $registerErrors[] = 'Password must be at least 8 characters.';
+            $registerErrors[] = t('auth.error.password_length');
         }
 
         if ($password !== $confirm) {
-            $registerErrors[] = 'Passwords do not match.';
+            $registerErrors[] = t('auth.error.password_mismatch');
         }
 
         if (empty($registerErrors)) {
@@ -69,7 +69,7 @@ if (hasDatabaseConnection() && !$isLoggedIn && $_SERVER['REQUEST_METHOD'] === 'P
             $stmt->execute([':email' => $registerEmail]);
 
             if ($stmt->fetch()) {
-                $registerErrors[] = 'This email is already in use.';
+                $registerErrors[] = t('auth.error.email_in_use');
             }
         }
 
@@ -92,34 +92,44 @@ if (hasDatabaseConnection() && !$isLoggedIn && $_SERVER['REQUEST_METHOD'] === 'P
 
 if (isset($_GET['registered']) && $_GET['registered'] === '1') {
     $activeForm = 'login';
-    $successMessage = 'Registration completed successfully. You can now sign in.';
+    $successMessage = t('home.registered_success');
 }
 ?>
 <!DOCTYPE html>
-<html lang="en">
+<html lang="<?php echo htmlspecialchars(currentLocale(), ENT_QUOTES, 'UTF-8'); ?>">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Candidate Tracking System</title>
+    <title><?php echo htmlspecialchars(t('site.title'), ENT_QUOTES, 'UTF-8'); ?></title>
     <link rel="stylesheet" href="assets/css/style.css">
 </head>
 <body>
     <div class="preloader" id="preloader" aria-hidden="true">
         <div class="preloader__halo"></div>
         <div class="preloader__logo-wrap">
-            <img class="preloader__logo" src="assets/images/owlogo.png" alt="EduTrack logo">
+            <img class="preloader__logo" src="assets/images/owlogo.png" alt="<?php echo htmlspecialchars(t('site.logo_alt'), ENT_QUOTES, 'UTF-8'); ?>">
         </div>
-        <p class="preloader__brand">EduTrack</p>
+        <p class="preloader__brand"><?php echo htmlspecialchars(t('site.brand'), ENT_QUOTES, 'UTF-8'); ?></p>
     </div>
 
     <?php renderNavbar(); ?>
 
     <main class="page-shell">
+        <section class="home-hero" aria-label="<?php echo htmlspecialchars(t('home.hero_title'), ENT_QUOTES, 'UTF-8'); ?>">
+            <div class="home-hero__content">
+                <h1><?php echo htmlspecialchars(t('home.hero_title'), ENT_QUOTES, 'UTF-8'); ?></h1>
+                <p><?php echo htmlspecialchars(t('home.hero_description'), ENT_QUOTES, 'UTF-8'); ?></p>
+            </div>
+            <div class="home-hero__image-wrap">
+                <img class="home-hero__image" src="assets/images/edutrack_homepage_image.png" alt="EduTrack homepage">
+            </div>
+        </section>
+
         <?php if (!$isLoggedIn): ?>
             <section class="auth-panel" id="auth-panel">
                 <div class="auth-panel__switch">
-                    <a class="auth-tab <?php echo $activeForm !== 'register' ? 'auth-tab--active' : ''; ?>" href="index.php?form=login#auth-panel">Login</a>
-                    <a class="auth-tab <?php echo $activeForm === 'register' ? 'auth-tab--active' : ''; ?>" href="index.php?form=register#auth-panel">Register</a>
+                    <a class="auth-tab <?php echo $activeForm !== 'register' ? 'auth-tab--active' : ''; ?>" href="index.php?form=login#auth-panel"><?php echo htmlspecialchars(t('home.login_tab'), ENT_QUOTES, 'UTF-8'); ?></a>
+                    <a class="auth-tab <?php echo $activeForm === 'register' ? 'auth-tab--active' : ''; ?>" href="index.php?form=register#auth-panel"><?php echo htmlspecialchars(t('home.register_tab'), ENT_QUOTES, 'UTF-8'); ?></a>
                 </div>
 
                 <?php if ($successMessage !== ''): ?>
@@ -132,8 +142,8 @@ if (isset($_GET['registered']) && $_GET['registered'] === '1') {
 
                 <?php if ($activeForm === 'register'): ?>
                     <div class="auth-heading">
-                        <h1>Create Your Account</h1>
-                        <p>Join the platform and start managing your candidate journey.</p>
+                        <h1><?php echo htmlspecialchars(t('home.register_title'), ENT_QUOTES, 'UTF-8'); ?></h1>
+                        <p><?php echo htmlspecialchars(t('home.register_subtitle'), ENT_QUOTES, 'UTF-8'); ?></p>
                     </div>
 
                     <?php if (!empty($registerErrors)): ?>
@@ -148,20 +158,20 @@ if (isset($_GET['registered']) && $_GET['registered'] === '1') {
                         <input type="hidden" name="auth_action" value="register">
 
                         <label class="auth-form__field">
-                            <span>Username</span>
+                            <span><?php echo htmlspecialchars(t('home.username'), ENT_QUOTES, 'UTF-8'); ?></span>
                             <input type="text" name="username" value="<?php echo htmlspecialchars($registerUsername, ENT_QUOTES, 'UTF-8'); ?>" required>
                         </label>
 
                         <label class="auth-form__field">
-                            <span>Email</span>
+                            <span><?php echo htmlspecialchars(t('home.email'), ENT_QUOTES, 'UTF-8'); ?></span>
                             <input type="email" name="email" value="<?php echo htmlspecialchars($registerEmail, ENT_QUOTES, 'UTF-8'); ?>" required>
                         </label>
 
                         <label class="auth-form__field">
-                            <span>Password</span>
+                            <span><?php echo htmlspecialchars(t('home.password'), ENT_QUOTES, 'UTF-8'); ?></span>
                             <div class="password-field">
                                 <input type="password" name="password" class="js-password-input" required>
-                                <button class="password-toggle" type="button" aria-label="Show password" title="Show password">
+                                <button class="password-toggle" type="button" aria-label="<?php echo htmlspecialchars(t('home.show_password'), ENT_QUOTES, 'UTF-8'); ?>" title="<?php echo htmlspecialchars(t('home.show_password'), ENT_QUOTES, 'UTF-8'); ?>">
                                     <span class="password-toggle__icon" aria-hidden="true">
                                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                             <path d="M3 3l18 18"></path>
@@ -175,10 +185,10 @@ if (isset($_GET['registered']) && $_GET['registered'] === '1') {
                         </label>
 
                         <label class="auth-form__field">
-                            <span>Confirm Password</span>
+                            <span><?php echo htmlspecialchars(t('home.confirm_password'), ENT_QUOTES, 'UTF-8'); ?></span>
                             <div class="password-field">
                                 <input type="password" name="confirm" class="js-password-input" required>
-                                <button class="password-toggle" type="button" aria-label="Show password" title="Show password">
+                                <button class="password-toggle" type="button" aria-label="<?php echo htmlspecialchars(t('home.show_password'), ENT_QUOTES, 'UTF-8'); ?>" title="<?php echo htmlspecialchars(t('home.show_password'), ENT_QUOTES, 'UTF-8'); ?>">
                                     <span class="password-toggle__icon" aria-hidden="true">
                                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                             <path d="M3 3l18 18"></path>
@@ -191,12 +201,12 @@ if (isset($_GET['registered']) && $_GET['registered'] === '1') {
                             </div>
                         </label>
 
-                        <button class="button button--primary" type="submit" <?php echo $dbConnectionError !== null ? 'disabled' : ''; ?>>Create Account</button>
+                        <button class="button button--primary" type="submit" <?php echo $dbConnectionError !== null ? 'disabled' : ''; ?>><?php echo htmlspecialchars(t('home.create_account'), ENT_QUOTES, 'UTF-8'); ?></button>
                     </form>
                 <?php else: ?>
                     <div class="auth-heading">
-                        <h1>Welcome Back!</h1>
-                        <p>Sign in to continue to your dashboard and account tools.</p>
+                        <h1><?php echo htmlspecialchars(t('home.login_title'), ENT_QUOTES, 'UTF-8'); ?></h1>
+                        <p><?php echo htmlspecialchars(t('home.login_subtitle'), ENT_QUOTES, 'UTF-8'); ?></p>
                     </div>
 
                     <?php if ($loginError !== ''): ?>
@@ -207,15 +217,15 @@ if (isset($_GET['registered']) && $_GET['registered'] === '1') {
                         <input type="hidden" name="auth_action" value="login">
 
                         <label class="auth-form__field">
-                            <span>Email</span>
+                            <span><?php echo htmlspecialchars(t('home.email'), ENT_QUOTES, 'UTF-8'); ?></span>
                             <input type="email" name="email" value="<?php echo htmlspecialchars($loginEmail, ENT_QUOTES, 'UTF-8'); ?>" required>
                         </label>
 
                         <label class="auth-form__field">
-                            <span>Password</span>
+                            <span><?php echo htmlspecialchars(t('home.password'), ENT_QUOTES, 'UTF-8'); ?></span>
                             <div class="password-field">
                                 <input type="password" name="password" class="js-password-input" required>
-                                <button class="password-toggle" type="button" aria-label="Show password" title="Show password">
+                                <button class="password-toggle" type="button" aria-label="<?php echo htmlspecialchars(t('home.show_password'), ENT_QUOTES, 'UTF-8'); ?>" title="<?php echo htmlspecialchars(t('home.show_password'), ENT_QUOTES, 'UTF-8'); ?>">
                                     <span class="password-toggle__icon" aria-hidden="true">
                                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                             <path d="M3 3l18 18"></path>
@@ -228,13 +238,13 @@ if (isset($_GET['registered']) && $_GET['registered'] === '1') {
                             </div>
                         </label>
 
-                        <button class="button button--secondary" type="submit" <?php echo $dbConnectionError !== null ? 'disabled' : ''; ?>>Sign In</button>
+                        <button class="button button--secondary" type="submit" <?php echo $dbConnectionError !== null ? 'disabled' : ''; ?>><?php echo htmlspecialchars(t('home.sign_in'), ENT_QUOTES, 'UTF-8'); ?></button>
                     </form>
                 <?php endif; ?>
             </section>
         <?php else: ?>
             <section class="welcome-panel">
-                <h1>Welcome back, <?php echo htmlspecialchars($_SESSION['username'], ENT_QUOTES, 'UTF-8'); ?></h1>
+                <h1><?php echo htmlspecialchars(t('home.welcome_back', ['username' => ($_SESSION['username'] ?? '')]), ENT_QUOTES, 'UTF-8'); ?></h1>
             </section>
         <?php endif; ?>
     </main>
@@ -256,8 +266,8 @@ if (isset($_GET['registered']) && $_GET['registered'] === '1') {
                 var isHidden = input.type === 'password';
                 input.type = isHidden ? 'text' : 'password';
                 icon.innerHTML = isHidden ? openEyeIcon : closedEyeIcon;
-                button.setAttribute('aria-label', isHidden ? 'Hide password' : 'Show password');
-                button.setAttribute('title', isHidden ? 'Hide password' : 'Show password');
+                button.setAttribute('aria-label', isHidden ? <?php echo json_encode(t('home.hide_password')); ?> : <?php echo json_encode(t('home.show_password')); ?>);
+                button.setAttribute('title', isHidden ? <?php echo json_encode(t('home.hide_password')); ?> : <?php echo json_encode(t('home.show_password')); ?>);
             });
         });
 

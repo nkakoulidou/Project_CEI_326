@@ -4,65 +4,38 @@ require_once __DIR__ . '/../includes/admin.php';
 
 requireAdmin();
 
-$stats = [
-    'users' => countRows($pdo, 'users'),
-    'services' => countRows($pdo, 'services'),
-    'lists' => countRows($pdo, 'lists'),
-    'candidates' => countRows($pdo, 'candidates'),
-];
-
 $basePath = getProjectBasePath();
 $cards = [
     [
-        'title' => 'Manage Users',
-        'description' => 'View all registered users and manage their account details.',
+        'title' => t('admin.dashboard.manage_users_title'),
+        'description' => t('admin.dashboard.manage_users_desc'),
         'icon' => 'U',
         'href' => $basePath . '/admin/users.php',
     ],
     [
-        'title' => 'Manage Lists',
-        'description' => 'Create and manage the available appointment lists and their service details.',
+        'title' => t('admin.dashboard.manage_lists_title'),
+        'description' => t('admin.dashboard.manage_lists_desc'),
         'icon' => 'L',
         'href' => $basePath . '/admin/lists.php',
     ],
     [
-        'title' => 'Reports',
-        'description' => 'See dashboard statistics and summary charts for the lists.',
+        'title' => t('admin.dashboard.reports_title'),
+        'description' => t('admin.dashboard.reports_desc'),
         'icon' => 'R',
         'href' => $basePath . '/admin/reports.php',
     ],
 ];
 
-adminPageStart('Admin Dashboard');
+adminPageStart('admin.dashboard.title');
 ?>
 
 <main class="admin-page">
     <section class="admin-hero">
         <div>
-            <p class="admin-eyebrow">Admin Module</p>
-            <h1>Welcome back, <?php echo h($_SESSION['username'] ?? 'Admin'); ?></h1>
-            <p>Use the shortcuts below to manage users, lists, reports and your profile from one place.</p>
+            <h1><?php echo h(t('admin.dashboard.heading', ['username' => ($_SESSION['username'] ?? 'Admin')])); ?></h1>
+            <p><?php echo h(t('admin.dashboard.intro')); ?></p>
         </div>
-        <a class="button button--secondary" href="<?php echo h($basePath . '/admin/profile.php'); ?>">Edit Profile</a>
-    </section>
-
-    <section class="admin-stats-grid">
-        <article class="admin-stat-card">
-            <span>Total Users</span>
-            <strong><?php echo $stats['users']; ?></strong>
-        </article>
-        <article class="admin-stat-card">
-            <span>Services</span>
-            <strong><?php echo $stats['services']; ?></strong>
-        </article>
-        <article class="admin-stat-card">
-            <span>Lists</span>
-            <strong><?php echo $stats['lists']; ?></strong>
-        </article>
-        <article class="admin-stat-card">
-            <span>Candidates</span>
-            <strong><?php echo $stats['candidates']; ?></strong>
-        </article>
+        <a class="button button--secondary" href="<?php echo h($basePath . '/admin/profile.php'); ?>"><?php echo h(t('admin.dashboard.edit_profile')); ?></a>
     </section>
 
     <section class="admin-card-grid">

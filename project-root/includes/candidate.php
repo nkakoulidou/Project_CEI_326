@@ -19,13 +19,25 @@ function requireCandidateLogin(): int
 
 function candidateTrackedTable(PDO $pdo): string
 {
-    return tableExists($pdo, 'tracked_candidates') ? 'tracked_candidates' : 'user_candidate_links';
+    if (tableExists($pdo, 'tracked_candidates')) {
+        return 'tracked_candidates';
+    }
+
+    if (tableExists($pdo, 'user_candidate_links')) {
+        return 'user_candidate_links';
+    }
+
+    return 'tracked_candidates';
 }
 
 function candidateApplicationsTable(PDO $pdo): ?string
 {
     if (tableExists($pdo, 'applications')) {
         return 'applications';
+    }
+
+    if (tableExists($pdo, 'list_entries')) {
+        return 'list_entries';
     }
 
     return null;
@@ -40,7 +52,7 @@ function candidateApplicationSource(PDO $pdo): array
 {
     $applicationsTable = candidateApplicationsTable($pdo);
 
-    if ($applicationsTable !== null) {
+    if ($applicationsTable === 'applications') {
         return [
             'table' => $applicationsTable,
             'code' => "{$applicationsTable}.application_code",
@@ -144,12 +156,17 @@ function fetchCandidateSummary(PDO $pdo, int $userId): array
 
 function fetchCandidateProfile(PDO $pdo, int $userId): array
 {
+    $birthDateSelect = columnExists($pdo, 'candidates', 'birth_date')
+        ? 'candidates.birth_date'
+        : 'NULL AS birth_date';
+
     $stmt = $pdo->prepare(
-        'SELECT
+        "SELECT
             users.username,
             users.email,
             candidates.first_name,
             candidates.last_name,
+            {$birthDateSelect},
             candidates.specialty,
             candidates.ranking,
             candidates.phone,
@@ -157,7 +174,7 @@ function fetchCandidateProfile(PDO $pdo, int $userId): array
          FROM users
          LEFT JOIN candidates ON candidates.user_id = users.id
          WHERE users.id = :id
-         LIMIT 1'
+         LIMIT 1"
     );
     $stmt->execute([':id' => $userId]);
 
@@ -184,17 +201,27 @@ function fetchCandidatePreferences(PDO $pdo, int $userId): array
 function saveCandidateProfile(PDO $pdo, int $userId, array $data): ?string
 {
     $username = trim($data['username'] ?? '');
+    $email = strtolower(trim($data['email'] ?? ''));
     $firstName = trim($data['first_name'] ?? '');
     $lastName = trim($data['last_name'] ?? '');
 
-    if ($username === '' || $firstName === '' || $lastName === '') {
-        return 'Username, first name and last name are required.';
+    if ($username === '' || $email === '' || $firstName === '' || $lastName === '') {
+        return t('candidate.profile.error.required_names');
+    }
+    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        return t('candidate.profile.error.invalid_email');
     }
 
+    $birthDate = trim((string) ($data['birth_date'] ?? ''));
+    $birthDate = $birthDate !== '' ? $birthDate : null;
+    $hasBirthDateColumn = columnExists($pdo, 'candidates', 'birth_date');
+    $hasCandidateEmailColumn = columnExists($pdo, 'candidates', 'email');
+
     try {
-        $stmt = $pdo->prepare('UPDATE users SET username = :username WHERE id = :id');
+        $stmt = $pdo->prepare('UPDATE users SET username = :username, email = :email WHERE id = :id');
         $stmt->execute([
             ':username' => $username,
+            ':email' => $email,
             ':id' => $userId,
         ]);
         $_SESSION['username'] = $username;
@@ -207,21 +234,64 @@ function saveCandidateProfile(PDO $pdo, int $userId, array $data): ?string
             ':phone' => trim($data['phone'] ?? '') ?: null,
             ':district' => trim($data['district'] ?? '') ?: null,
         ];
+        if ($hasBirthDateColumn) {
+            $candidateData[':birth_date'] = $birthDate;
+        }
+        if ($hasCandidateEmailColumn) {
+            $candidateData[':email'] = $email;
+        }
 
         $stmt = $pdo->prepare('SELECT id FROM candidates WHERE user_id = :user_id LIMIT 1');
         $stmt->execute([':user_id' => $userId]);
 
         if ($stmt->fetchColumn()) {
-            $stmt = $pdo->prepare(
-                'UPDATE candidates
-                 SET first_name = :first_name, last_name = :last_name, specialty = :specialty, phone = :phone, district = :district
-                 WHERE user_id = :user_id'
-            );
+            if ($hasBirthDateColumn && $hasCandidateEmailColumn) {
+                $stmt = $pdo->prepare(
+                    'UPDATE candidates
+                     SET first_name = :first_name, last_name = :last_name, birth_date = :birth_date, email = :email, specialty = :specialty, phone = :phone, district = :district
+                     WHERE user_id = :user_id'
+                );
+            } elseif ($hasBirthDateColumn) {
+                $stmt = $pdo->prepare(
+                    'UPDATE candidates
+                     SET first_name = :first_name, last_name = :last_name, birth_date = :birth_date, specialty = :specialty, phone = :phone, district = :district
+                     WHERE user_id = :user_id'
+                );
+            } elseif ($hasCandidateEmailColumn) {
+                $stmt = $pdo->prepare(
+                    'UPDATE candidates
+                     SET first_name = :first_name, last_name = :last_name, email = :email, specialty = :specialty, phone = :phone, district = :district
+                     WHERE user_id = :user_id'
+                );
+            } else {
+                $stmt = $pdo->prepare(
+                    'UPDATE candidates
+                     SET first_name = :first_name, last_name = :last_name, specialty = :specialty, phone = :phone, district = :district
+                     WHERE user_id = :user_id'
+                );
+            }
         } else {
-            $stmt = $pdo->prepare(
-                'INSERT INTO candidates (user_id, first_name, last_name, specialty, phone, district)
-                 VALUES (:user_id, :first_name, :last_name, :specialty, :phone, :district)'
-            );
+            if ($hasBirthDateColumn && $hasCandidateEmailColumn) {
+                $stmt = $pdo->prepare(
+                    'INSERT INTO candidates (user_id, first_name, last_name, birth_date, email, specialty, phone, district)
+                     VALUES (:user_id, :first_name, :last_name, :birth_date, :email, :specialty, :phone, :district)'
+                );
+            } elseif ($hasBirthDateColumn) {
+                $stmt = $pdo->prepare(
+                    'INSERT INTO candidates (user_id, first_name, last_name, birth_date, specialty, phone, district)
+                     VALUES (:user_id, :first_name, :last_name, :birth_date, :specialty, :phone, :district)'
+                );
+            } elseif ($hasCandidateEmailColumn) {
+                $stmt = $pdo->prepare(
+                    'INSERT INTO candidates (user_id, first_name, last_name, email, specialty, phone, district)
+                     VALUES (:user_id, :first_name, :last_name, :email, :specialty, :phone, :district)'
+                );
+            } else {
+                $stmt = $pdo->prepare(
+                    'INSERT INTO candidates (user_id, first_name, last_name, specialty, phone, district)
+                     VALUES (:user_id, :first_name, :last_name, :specialty, :phone, :district)'
+                );
+            }
         }
         $stmt->execute($candidateData);
 
@@ -240,7 +310,7 @@ function saveCandidateProfile(PDO $pdo, int $userId, array $data): ?string
             ':notify_rank_updates' => isset($data['notify_rank_updates']) ? 1 : 0,
         ]);
     } catch (PDOException $exception) {
-        return 'The username is already in use.';
+        return t('candidate.profile.error.username_or_email_in_use');
     }
 
     return null;
@@ -253,15 +323,15 @@ function updateCandidatePassword(PDO $pdo, int $userId, array $data): ?string
     $passwordHash = $stmt->fetchColumn();
 
     if (!$passwordHash || !password_verify($data['current_password'] ?? '', $passwordHash)) {
-        return 'Current password is incorrect.';
+        return t('candidate.profile.error.current_password');
     }
 
     if (strlen($data['new_password'] ?? '') < 8) {
-        return 'New password must be at least 8 characters.';
+        return t('candidate.profile.error.password_length');
     }
 
     if (($data['new_password'] ?? '') !== ($data['confirm_password'] ?? '')) {
-        return 'The new passwords do not match.';
+        return t('candidate.profile.error.password_mismatch');
     }
 
     $stmt = $pdo->prepare('UPDATE users SET password_hash = :password_hash WHERE id = :id');
@@ -275,6 +345,10 @@ function updateCandidatePassword(PDO $pdo, int $userId, array $data): ?string
 
 function fetchCandidateApplications(PDO $pdo, int $userId, string $keyword = ''): array
 {
+    if (candidateApplicationsTable($pdo) === null) {
+        return [];
+    }
+
     $source = candidateApplicationSource($pdo);
     $sql = "
         SELECT
@@ -343,6 +417,10 @@ function searchCandidates(PDO $pdo, int $userId, string $search = ''): array
 
 function fetchTrackedCandidates(PDO $pdo, int $userId): array
 {
+    if (candidateApplicationsTable($pdo) === null) {
+        return [];
+    }
+
     $trackedTable = candidateTrackedTable($pdo);
     $source = candidateApplicationSource($pdo);
     $metadataSelect = candidateHasListMetadata($pdo)

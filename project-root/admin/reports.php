@@ -21,46 +21,38 @@ if (tableExists($pdo, 'candidates') && columnExists($pdo, 'candidates', 'birth_d
     )->fetchColumn();
 }
 
-$specialtyStats = [];
+$cityStats = [];
 
-if (tableExists($pdo, 'candidates') && columnExists($pdo, 'candidates', 'specialty')) {
-    if (
-        tableExists($pdo, 'committee_lists') &&
-        tableExists($pdo, 'specialties') &&
-        columnExists($pdo, 'candidates', 'committee_list_id') &&
-        columnExists($pdo, 'committee_lists', 'specialty_id')
-    ) {
-        $specialtyStats = $pdo->query(
-            "SELECT
-                COALESCE(NULLIF(specialties.name, ''), NULLIF(candidates.specialty, ''), 'Unassigned') AS specialty_name,
-                COUNT(candidates.id) AS total_candidates
-             FROM candidates
-             LEFT JOIN committee_lists ON committee_lists.id = candidates.committee_list_id
-             LEFT JOIN specialties ON specialties.id = committee_lists.specialty_id
-             GROUP BY specialty_name
-             ORDER BY total_candidates DESC, specialty_name ASC"
-        )->fetchAll();
-    } else {
-        $specialtyStats = $pdo->query(
-            "SELECT
-                COALESCE(NULLIF(specialty, ''), 'Unassigned') AS specialty_name,
-                COUNT(id) AS total_candidates
-             FROM candidates
-             GROUP BY specialty_name
-             ORDER BY total_candidates DESC, specialty_name ASC"
-        )->fetchAll();
-    }
+if (tableExists($pdo, 'candidates') && columnExists($pdo, 'candidates', 'district')) {
+    $cityStats = $pdo->query(
+        "SELECT
+            COALESCE(NULLIF(TRIM(district), ''), 'Unknown') AS city_name,
+            COUNT(id) AS total_candidates
+         FROM candidates
+         GROUP BY city_name
+         ORDER BY total_candidates DESC, city_name ASC"
+    )->fetchAll();
 }
 
-$yearlyStats = tableExists($pdo, 'applications')
-    ? $pdo->query(
-        'SELECT YEAR(submitted_at) AS application_year, COUNT(*) AS total_candidates
-         FROM applications
-         WHERE submitted_at IS NOT NULL
-         GROUP BY YEAR(submitted_at)
-         ORDER BY YEAR(submitted_at) ASC'
-    )->fetchAll()
-    : [];
+$specialtyStats = [];
+if (tableExists($pdo, 'candidates') && columnExists($pdo, 'candidates', 'specialty')) {
+    $specialtyStats = $pdo->query(
+        "SELECT
+            COALESCE(NULLIF(TRIM(specialty), ''), 'Unknown') AS specialty_name,
+            COUNT(id) AS total_candidates
+         FROM candidates
+         GROUP BY specialty_name
+         ORDER BY total_candidates DESC, specialty_name ASC"
+    )->fetchAll();
+}
+
+$cityChart = [];
+foreach ($cityStats as $row) {
+    $cityChart[] = [
+        'label' => $row['city_name'],
+        'value' => (int) $row['total_candidates'],
+    ];
+}
 
 $specialtyChart = [];
 foreach ($specialtyStats as $row) {
@@ -70,86 +62,58 @@ foreach ($specialtyStats as $row) {
     ];
 }
 
-$yearChart = [];
-foreach ($yearlyStats as $row) {
-    $yearChart[] = [
-        'label' => (string) $row['application_year'],
-        'value' => (int) $row['total_candidates'],
-    ];
-}
-
-adminPageStart('Reports');
+adminPageStart('admin.reports.title');
 ?>
 
 <main class="admin-page">
     <section class="admin-hero admin-hero--tight">
         <div>
-            <p class="admin-eyebrow">Reports</p>
-            <h1>Statistics Dashboard</h1>
-            <p>Summary cards and simple charts for specialties, candidate ages and yearly activity.</p>
+            <h1><?php echo h(t('admin.reports.heading')); ?></h1>
+            <p><?php echo h(t('admin.reports.intro')); ?></p>
         </div>
-    </section>
-
-    <section class="admin-stats-grid">
-        <article class="admin-stat-card">
-            <span>Total Users</span>
-            <strong><?php echo $totals['users']; ?></strong>
-        </article>
-        <article class="admin-stat-card">
-            <span>Admin Accounts</span>
-            <strong><?php echo $totals['admins']; ?></strong>
-        </article>
-        <article class="admin-stat-card">
-            <span>Published Lists</span>
-            <strong><?php echo $totals['lists']; ?></strong>
-        </article>
-        <article class="admin-stat-card">
-            <span>Average Candidate Age</span>
-            <strong><?php echo h($averageAge !== null ? (string) $averageAge : 'N/A'); ?></strong>
-        </article>
     </section>
 
     <section class="admin-two-column">
         <article class="admin-panel">
             <div class="admin-panel__header">
-                <h2>Candidates Per Specialty</h2>
+                <h2><?php echo h(t('admin.reports.candidates_per_specialty')); ?></h2>
             </div>
-            <div class="admin-chart" id="specialty-chart" data-chart='<?php echo h(json_encode($specialtyChart, JSON_UNESCAPED_UNICODE)); ?>'></div>
+            <div class="admin-chart admin-chart--pie" id="city-chart" data-chart='<?php echo h(json_encode($cityChart, JSON_UNESCAPED_UNICODE)); ?>'></div>
         </article>
 
         <article class="admin-panel">
             <div class="admin-panel__header">
-                <h2>New Candidates Per Year</h2>
+                <h2><?php echo h(t('admin.reports.specialty_column_chart')); ?></h2>
             </div>
-            <div class="admin-chart" id="year-chart" data-chart='<?php echo h(json_encode($yearChart, JSON_UNESCAPED_UNICODE)); ?>'></div>
+            <div class="admin-chart admin-chart--columns" id="specialty-chart" data-chart='<?php echo h(json_encode($specialtyChart, JSON_UNESCAPED_UNICODE)); ?>'></div>
         </article>
     </section>
 
     <section class="admin-panel">
         <div class="admin-panel__header">
-            <h2>Detailed Figures</h2>
+            <h2><?php echo h(t('admin.reports.detailed_figures')); ?></h2>
         </div>
         <div class="admin-table-wrap">
             <table class="admin-table">
                 <thead>
                     <tr>
-                        <th>Metric</th>
-                        <th>Value</th>
+                        <th><?php echo h(t('admin.reports.metric')); ?></th>
+                        <th><?php echo h(t('admin.reports.value')); ?></th>
                     </tr>
                 </thead>
                 <tbody>
                     <tr>
-                        <td>Total candidates</td>
+                        <td><?php echo h(t('admin.reports.total_candidates')); ?></td>
                         <td><?php echo $totals['candidates']; ?></td>
                     </tr>
                     <tr>
-                        <td>Average candidate age</td>
-                        <td><?php echo h($averageAge !== null ? (string) $averageAge . ' years' : 'Not enough data'); ?></td>
+                        <td><?php echo h(t('admin.reports.average_age_row')); ?></td>
+                        <td><?php echo h($averageAge !== null ? (string) $averageAge . ' ' . t('admin.reports.years_suffix') : t('admin.reports.not_enough_data')); ?></td>
                     </tr>
-                    <?php foreach ($specialtyStats as $row): ?>
+                    <?php foreach ($cityStats as $row): ?>
                         <tr>
-                            <td><?php echo h($row['specialty_name']); ?></td>
-                            <td><?php echo (int) $row['total_candidates']; ?> candidates</td>
+                            <td><?php echo h($row['city_name']); ?></td>
+                            <td><?php echo (int) $row['total_candidates']; ?> <?php echo h(t('admin.reports.candidates_suffix')); ?></td>
                         </tr>
                     <?php endforeach; ?>
                 </tbody>
@@ -167,17 +131,62 @@ adminPageStart('Reports');
 
         var raw = chart.getAttribute('data-chart');
         if (!raw) {
-            chart.innerHTML = '<p class="admin-empty">No data available.</p>';
+            chart.innerHTML = '<p class="admin-empty"><?php echo h(t('admin.reports.no_data')); ?></p>';
             return;
         }
 
         var items = JSON.parse(raw);
         if (!items.length) {
-            chart.innerHTML = '<p class="admin-empty">No data available.</p>';
+            chart.innerHTML = '<p class="admin-empty"><?php echo h(t('admin.reports.no_data')); ?></p>';
             return;
         }
 
         var max = Math.max.apply(null, items.map(function (item) { return item.value; })) || 1;
+        if (chart.classList.contains('admin-chart--pie')) {
+            var total = items.reduce(function (sum, item) { return sum + item.value; }, 0) || 1;
+            var colors = ['#a7f3d0', '#bfdbfe', '#fbcfe8', '#fde68a', '#c4b5fd', '#fdba74', '#99f6e4', '#ddd6fe', '#fecdd3', '#bae6fd'];
+            var angle = 0;
+            var stops = [];
+            var legend = [];
+
+            items.forEach(function (item, index) {
+                var part = (item.value / total) * 360;
+                var start = angle;
+                var end = angle + part;
+                var color = colors[index % colors.length];
+                stops.push(color + ' ' + start.toFixed(2) + 'deg ' + end.toFixed(2) + 'deg');
+                angle = end;
+                legend.push(
+                    '<li class="admin-chart-pie__legend-item">' +
+                        '<span class="admin-chart-pie__dot" style="background:' + color + '"></span>' +
+                        '<span class="admin-chart-pie__legend-label">' + item.label + '</span>' +
+                        '<strong class="admin-chart-pie__legend-value">' + item.value + '</strong>' +
+                    '</li>'
+                );
+            });
+
+            chart.innerHTML =
+                '<div class="admin-chart-pie">' +
+                    '<div class="admin-chart-pie__disk" style="background: conic-gradient(' + stops.join(',') + ')"></div>' +
+                    '<ul class="admin-chart-pie__legend">' + legend.join('') + '</ul>' +
+                '</div>';
+            return;
+        }
+
+        if (chart.classList.contains('admin-chart--columns')) {
+            var colors = ['#93c5fd', '#86efac', '#f9a8d4', '#fcd34d', '#a5b4fc', '#fdba74', '#67e8f9', '#c4b5fd', '#fca5a5', '#bef264'];
+            chart.innerHTML = '<div class="admin-chart-columns">' + items.map(function (item) {
+                var height = Math.max((item.value / max) * 100, item.value > 0 ? 8 : 0);
+                var color = colors[Math.abs(item.label.length) % colors.length];
+                return '<div class="admin-chart-columns__item">' +
+                    '<span class="admin-chart-columns__value">' + item.value + '</span>' +
+                    '<div class="admin-chart-columns__track"><span class="admin-chart-columns__bar" style="height:' + height + '%;background:' + color + '"></span></div>' +
+                    '<span class="admin-chart-columns__label" title="' + item.label + '">' + item.label + '</span>' +
+                    '</div>';
+            }).join('') + '</div>';
+            return;
+        }
+
         chart.innerHTML = items.map(function (item) {
             var width = Math.max((item.value / max) * 100, item.value > 0 ? 12 : 0);
             return '<div class="admin-chart__row">' +
@@ -188,8 +197,8 @@ adminPageStart('Reports');
         }).join('');
     }
 
+    renderSimpleChart('city-chart');
     renderSimpleChart('specialty-chart');
-    renderSimpleChart('year-chart');
 </script>
 
 <?php adminPageEnd(); ?>

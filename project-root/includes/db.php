@@ -38,9 +38,16 @@ try {
         ]
     );
 
-    ensureCandidateModuleSchema($pdo);
 } catch (PDOException $e) {
     $dbConnectionError = 'Database connection failed. Check your .env settings and make sure MySQL is running.';
+}
+
+if ($pdo instanceof PDO) {
+    try {
+        ensureCandidateModuleSchema($pdo);
+    } catch (PDOException $e) {
+        $dbConnectionError = 'Database schema update failed. Please check database tables/columns.';
+    }
 }
 
 function hasDatabaseConnection(): bool
@@ -54,13 +61,20 @@ function ensureCandidateModuleSchema(PDO $pdo): void
 {
     if (tableExists($pdo, 'candidates')) {
         $candidateColumns = [
-            'phone' => 'ALTER TABLE candidates ADD COLUMN phone VARCHAR(30) NULL AFTER ranking',
-            'district' => 'ALTER TABLE candidates ADD COLUMN district VARCHAR(100) NULL AFTER phone',
+            'user_id' => 'ALTER TABLE candidates ADD COLUMN user_id INT NULL UNIQUE',
+            'email' => 'ALTER TABLE candidates ADD COLUMN email VARCHAR(120) NULL',
+            'phone' => 'ALTER TABLE candidates ADD COLUMN phone VARCHAR(30) NULL',
+            'district' => 'ALTER TABLE candidates ADD COLUMN district VARCHAR(100) NULL',
+            'birth_date' => 'ALTER TABLE candidates ADD COLUMN birth_date DATE NULL',
         ];
 
         foreach ($candidateColumns as $column => $sql) {
             if (!columnExists($pdo, 'candidates', $column)) {
-                $pdo->exec($sql);
+                try {
+                    $pdo->exec($sql);
+                } catch (PDOException $exception) {
+                    // Keep schema migration resilient across different legacy layouts.
+                }
             }
         }
     }
@@ -98,7 +112,14 @@ function ensureCandidateModuleSchema(PDO $pdo): void
             )'
         );
 
-        if (tableExists($pdo, 'list_entries')) {
+        if (
+            tableExists($pdo, 'list_entries') &&
+            columnExists($pdo, 'list_entries', 'candidate_id') &&
+            columnExists($pdo, 'list_entries', 'list_id') &&
+            columnExists($pdo, 'list_entries', 'created_at') &&
+            columnExists($pdo, 'list_entries', 'status') &&
+            columnExists($pdo, 'list_entries', 'remarks')
+        ) {
             $pdo->exec(
                 'INSERT IGNORE INTO applications (
                     candidate_id,
@@ -125,7 +146,7 @@ function ensureCandidateModuleSchema(PDO $pdo): void
         }
     }
 
-    if (!tableExists($pdo, 'tracked_candidates') && tableExists($pdo, 'user_candidate_links')) {
+    if (!tableExists($pdo, 'tracked_candidates')) {
         $pdo->exec(
             'CREATE TABLE IF NOT EXISTS tracked_candidates (
                 id INT AUTO_INCREMENT PRIMARY KEY,
@@ -135,7 +156,9 @@ function ensureCandidateModuleSchema(PDO $pdo): void
                 UNIQUE KEY uq_tracked_candidates_user_candidate (user_id, candidate_id)
             )'
         );
+    }
 
+    if (tableExists($pdo, 'tracked_candidates') && tableExists($pdo, 'user_candidate_links')) {
         $pdo->exec(
             'INSERT IGNORE INTO tracked_candidates (user_id, candidate_id, created_at)
              SELECT user_id, candidate_id, created_at FROM user_candidate_links'

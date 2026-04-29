@@ -4,104 +4,118 @@ require_once __DIR__ . '/../includes/admin.php';
 
 requireAdmin();
 
+// Keep Manage Lists self-contained and robust by ensuring required tables exist.
+$pdo->exec(
+    'CREATE TABLE IF NOT EXISTS specialties (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        name VARCHAR(120) NOT NULL UNIQUE,
+        description TEXT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )'
+);
+
+$pdo->exec(
+    'CREATE TABLE IF NOT EXISTS committee_lists (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        specialty_id INT NOT NULL,
+        title VARCHAR(180) NOT NULL,
+        published_year INT NOT NULL,
+        candidate_count INT NOT NULL DEFAULT 0,
+        notes TEXT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT fk_committee_lists_specialty
+            FOREIGN KEY (specialty_id) REFERENCES specialties(id)
+            ON DELETE CASCADE
+    )'
+);
+
 $message = '';
 $error = '';
-$editId = isset($_GET['edit']) ? (int) $_GET['edit'] : 0;
+$selectedListId = isset($_GET['details_list_id']) ? (int) $_GET['details_list_id'] : 0;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
 
-    if ($action === 'create' || $action === 'update') {
-        $serviceId = (int) ($_POST['service_id'] ?? 0);
-        $academicYear = trim($_POST['academic_year'] ?? '');
-        $publicationDate = trim($_POST['publication_date'] ?? '');
-        $status = $_POST['status'] ?? 'draft';
-        $notes = trim($_POST['notes'] ?? '');
+    if ($action === 'add_specialty') {
+        $name = trim($_POST['name'] ?? '');
+        $description = trim($_POST['description'] ?? '');
 
-        $allowedStatuses = ['draft', 'published', 'archived'];
-        if ($serviceId <= 0 || $academicYear === '' || $publicationDate === '') {
-            $error = 'Service, academic year and publication date are required.';
-        } elseif (!in_array($status, $allowedStatuses, true)) {
-            $error = 'Invalid list status selected.';
+        if ($name === '') {
+            $error = t('admin.lists.error.name_required');
         } else {
-            if ($action === 'create') {
+            try {
                 $stmt = $pdo->prepare(
-                    'INSERT INTO lists (service_id, academic_year, publication_date, status, notes)
-                     VALUES (:service_id, :academic_year, :publication_date, :status, :notes)'
+                    'INSERT INTO specialties (name, description) VALUES (:name, :description)'
                 );
                 $stmt->execute([
-                    ':service_id' => $serviceId,
-                    ':academic_year' => $academicYear,
-                    ':publication_date' => $publicationDate,
-                    ':status' => $status,
-                    ':notes' => $notes !== '' ? $notes : null,
+                    ':name' => $name,
+                    ':description' => $description !== '' ? $description : null,
                 ]);
-                $message = 'List created successfully.';
-            } else {
-                $listId = (int) ($_POST['list_id'] ?? 0);
-                $stmt = $pdo->prepare(
-                    'UPDATE lists
-                     SET service_id = :service_id, academic_year = :academic_year, publication_date = :publication_date,
-                         status = :status, notes = :notes
-                     WHERE id = :id'
-                );
-                $stmt->execute([
-                    ':service_id' => $serviceId,
-                    ':academic_year' => $academicYear,
-                    ':publication_date' => $publicationDate,
-                    ':status' => $status,
-                    ':notes' => $notes !== '' ? $notes : null,
-                    ':id' => $listId,
-                ]);
-                $message = 'List updated successfully.';
-                $editId = 0;
+                $message = t('admin.lists.success.added');
+            } catch (PDOException $exception) {
+                $error = t('admin.lists.error.duplicate');
             }
         }
     }
 
-    if ($action === 'delete') {
-        $listId = (int) ($_POST['list_id'] ?? 0);
-        $stmt = $pdo->prepare('DELETE FROM lists WHERE id = :id');
-        $stmt->execute([':id' => $listId]);
-        $message = 'List deleted successfully.';
-        $editId = 0;
+}
+
+$specialties = $pdo->query(
+    'SELECT id, name, description
+     FROM specialties
+     ORDER BY name ASC'
+)->fetchAll();
+
+$committeeLists = $pdo->query(
+    'SELECT
+        committee_lists.id,
+        committee_lists.title,
+        committee_lists.published_year,
+        committee_lists.candidate_count,
+        specialties.name AS specialty_name
+     FROM committee_lists
+     INNER JOIN specialties ON specialties.id = committee_lists.specialty_id
+     ORDER BY committee_lists.created_at DESC, committee_lists.id DESC'
+)->fetchAll();
+
+$listDetailsRows = [];
+$listDetailsError = '';
+if ($selectedListId > 0) {
+    if (!tableExists($pdo, 'list_entries')) {
+        $listDetailsError = 'Ο πίνακας list_entries δεν υπάρχει.';
+    } elseif (!tableExists($pdo, 'candidates')) {
+        $listDetailsError = 'Ο πίνακας candidates δεν υπάρχει.';
+    } else {
+        $stmt = $pdo->prepare(
+            'SELECT
+                list_entries.position,
+                list_entries.total_score,
+                list_entries.degree_date,
+                list_entries.degree_grade,
+                list_entries.service_points,
+                list_entries.application_date,
+                list_entries.notes,
+                candidates.first_name,
+                candidates.last_name,
+                candidates.birth_date
+             FROM list_entries
+             INNER JOIN candidates ON candidates.id = list_entries.candidate_id
+             WHERE list_entries.list_id = :list_id
+             ORDER BY list_entries.position ASC, list_entries.id ASC'
+        );
+        $stmt->execute([':list_id' => $selectedListId]);
+        $listDetailsRows = $stmt->fetchAll();
     }
 }
 
-$services = $pdo->query('SELECT id, title FROM services ORDER BY title ASC')->fetchAll();
-
-$editList = null;
-if ($editId > 0) {
-    $stmt = $pdo->prepare('SELECT id, service_id, academic_year, publication_date, status, notes FROM lists WHERE id = :id');
-    $stmt->execute([':id' => $editId]);
-    $editList = $stmt->fetch();
-}
-
-$stmt = $pdo->query(
-    'SELECT
-        lists.id,
-        lists.academic_year,
-        lists.publication_date,
-        lists.status,
-        lists.notes,
-        services.title AS service_title,
-        services.category,
-        services.district
-     FROM lists
-     INNER JOIN services ON services.id = lists.service_id
-     ORDER BY lists.publication_date DESC, lists.id DESC'
-);
-$lists = $stmt->fetchAll();
-
-adminPageStart('Manage Lists');
+adminPageStart('admin.lists.title');
 ?>
 
 <main class="admin-page">
     <section class="admin-hero admin-hero--tight">
         <div>
-            <p class="admin-eyebrow">Manage Lists</p>
-            <h1>Appointment Lists</h1>
-            <p>Create, update and review the published appointment lists for each service.</p>
+            <h1><?php echo h(t('admin.lists.heading')); ?></h1>
+            <p><?php echo h(t('admin.lists.intro')); ?></p>
         </div>
     </section>
 
@@ -116,105 +130,121 @@ adminPageStart('Manage Lists');
     <section class="admin-two-column">
         <article class="admin-panel">
             <div class="admin-panel__header">
-                <h2><?php echo $editList ? 'Update List' : 'Create List'; ?></h2>
+                <h2><?php echo h(t('admin.lists.add_specialty')); ?></h2>
             </div>
             <form class="admin-form" method="post">
-                <input type="hidden" name="action" value="<?php echo $editList ? 'update' : 'create'; ?>">
-                <?php if ($editList): ?>
-                    <input type="hidden" name="list_id" value="<?php echo (int) $editList['id']; ?>">
-                <?php endif; ?>
+                <input type="hidden" name="action" value="add_specialty">
 
                 <label>
-                    <span>Service</span>
-                    <select name="service_id" required>
-                        <option value="">Select service</option>
-                        <?php foreach ($services as $service): ?>
-                            <option value="<?php echo (int) $service['id']; ?>" <?php echo ((int) ($editList['service_id'] ?? 0) === (int) $service['id']) ? 'selected' : ''; ?>>
-                                <?php echo h($service['title']); ?>
-                            </option>
-                        <?php endforeach; ?>
-                    </select>
+                    <span><?php echo h(t('admin.lists.specialty_name')); ?></span>
+                    <input type="text" name="name" required>
                 </label>
 
                 <label>
-                    <span>Academic Year</span>
-                    <input type="text" name="academic_year" value="<?php echo h($editList['academic_year'] ?? ''); ?>" placeholder="2025-2026" required>
+                    <span><?php echo h(t('admin.lists.description')); ?></span>
+                    <textarea name="description" rows="4" placeholder="<?php echo h(t('admin.lists.description_placeholder')); ?>"></textarea>
                 </label>
 
-                <label>
-                    <span>Publication Date</span>
-                    <input type="date" name="publication_date" value="<?php echo h($editList['publication_date'] ?? ''); ?>" required>
-                </label>
-
-                <label>
-                    <span>Status</span>
-                    <select name="status">
-                        <option value="draft" <?php echo (($editList['status'] ?? 'draft') === 'draft') ? 'selected' : ''; ?>>Draft</option>
-                        <option value="published" <?php echo (($editList['status'] ?? '') === 'published') ? 'selected' : ''; ?>>Published</option>
-                        <option value="archived" <?php echo (($editList['status'] ?? '') === 'archived') ? 'selected' : ''; ?>>Archived</option>
-                    </select>
-                </label>
-
-                <label>
-                    <span>Notes</span>
-                    <textarea name="notes" rows="4" placeholder="Optional notes"><?php echo h($editList['notes'] ?? ''); ?></textarea>
-                </label>
-
-                <div class="admin-form__actions">
-                    <button class="button button--primary" type="submit"><?php echo $editList ? 'Save Changes' : 'Create List'; ?></button>
-                    <?php if ($editList): ?>
-                        <a class="button button--secondary" href="<?php echo h(getProjectBasePath() . '/admin/lists.php'); ?>">Cancel</a>
-                    <?php endif; ?>
-                </div>
+                <button class="button button--primary" type="submit"><?php echo h(t('admin.lists.save_specialty')); ?></button>
             </form>
+
+            <div class="admin-panel__header" style="margin-top:1.25rem;">
+                <h2><?php echo h(t('admin.lists.selected_specialties')); ?></h2>
+            </div>
+
+            <?php if (empty($specialties)): ?>
+                <p class="admin-empty" style="padding:0 1.25rem 1.25rem;"><?php echo h(t('admin.lists.no_specialties')); ?></p>
+            <?php else: ?>
+                <div class="admin-table-wrap">
+                    <table class="admin-table">
+                        <thead>
+                            <tr>
+                                <th><?php echo h(t('admin.lists.specialty_name')); ?></th>
+                                <th><?php echo h(t('admin.lists.description')); ?></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($specialties as $specialty): ?>
+                                <tr>
+                                    <td><?php echo h($specialty['name']); ?></td>
+                                    <td><?php echo h($specialty['description'] ?? t('admin.lists.no_description')); ?></td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            <?php endif; ?>
         </article>
 
-        <article class="admin-panel">
-            <div class="admin-panel__header">
-                <h2>Existing Lists</h2>
+    </section>
+
+    <section class="admin-panel" style="margin-top:1.5rem;">
+        <div class="admin-panel__header">
+            <h2>Προβολή Στοιχείων Λίστας</h2>
+        </div>
+        <form class="admin-form" method="get" style="padding-bottom:0;">
+            <label>
+                <span>Λίστα</span>
+                <select name="details_list_id" required>
+                    <option value="">Επιλογή λίστας</option>
+                    <?php foreach ($committeeLists as $list): ?>
+                        <option value="<?php echo (int) $list['id']; ?>" <?php echo $selectedListId === (int) $list['id'] ? 'selected' : ''; ?>>
+                            <?php echo h($list['title'] . ' - ' . $list['specialty_name'] . ' (' . $list['published_year'] . ')'); ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+            </label>
+            <div class="admin-form__actions">
+                <button class="button button--secondary" type="submit">Προβολή</button>
             </div>
-            <div class="admin-table-wrap">
-                <table class="admin-table">
-                    <thead>
+        </form>
+
+        <?php if ($listDetailsError !== ''): ?>
+            <div class="admin-alert admin-alert--error" style="margin:1rem 1.4rem 0;"><?php echo h($listDetailsError); ?></div>
+        <?php endif; ?>
+
+        <div class="admin-table-wrap" style="margin-top:1rem;">
+            <table class="admin-table">
+                <thead>
+                    <tr>
+                        <th>A/A</th>
+                        <th>Ονοματεπώνυμο</th>
+                        <th>Σύνολο Μορίων</th>
+                        <th>Ημερομηνία Τίτλου</th>
+                        <th>Βαθμός Τίτλου</th>
+                        <th>Μόρια Υπηρεσίας</th>
+                        <th>Ημερομηνία Αίτησης</th>
+                        <th>Ημερομηνία Γέννησης</th>
+                        <th>Σημειώσεις</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php if ($selectedListId <= 0): ?>
                         <tr>
-                            <th>Service</th>
-                            <th>Category</th>
-                            <th>District</th>
-                            <th>Academic Year</th>
-                            <th>Publication Date</th>
-                            <th>Status</th>
-                            <th>Actions</th>
+                            <td colspan="9">Επίλεξε λίστα για να εμφανιστούν οι υποψήφιοι.</td>
                         </tr>
-                    </thead>
-                    <tbody>
-                        <?php if (empty($lists)): ?>
-                            <tr>
-                                <td colspan="7">No lists found.</td>
-                            </tr>
-                        <?php endif; ?>
+                    <?php elseif (empty($listDetailsRows)): ?>
+                        <tr>
+                            <td colspan="9">Δεν υπάρχουν υποψήφιοι για τη συγκεκριμένη λίστα.</td>
+                        </tr>
+                    <?php endif; ?>
 
-                        <?php foreach ($lists as $list): ?>
-                            <tr>
-                                <td><?php echo h($list['service_title']); ?></td>
-                                <td><?php echo h($list['category']); ?></td>
-                                <td><?php echo h($list['district']); ?></td>
-                                <td><?php echo h($list['academic_year']); ?></td>
-                                <td><?php echo h(date('d/m/Y', strtotime($list['publication_date']))); ?></td>
-                                <td><?php echo h(ucfirst($list['status'])); ?></td>
-                                <td class="admin-table__actions">
-                                    <a class="admin-link-button" href="<?php echo h(getProjectBasePath() . '/admin/lists.php?edit=' . (int) $list['id']); ?>">Edit</a>
-                                    <form method="post" onsubmit="return confirm('Delete this list?');">
-                                        <input type="hidden" name="action" value="delete">
-                                        <input type="hidden" name="list_id" value="<?php echo (int) $list['id']; ?>">
-                                        <button class="admin-link-button admin-link-button--danger" type="submit">Delete</button>
-                                    </form>
-                                </td>
-                            </tr>
-                        <?php endforeach; ?>
-                    </tbody>
-                </table>
-            </div>
-        </article>
+                    <?php foreach ($listDetailsRows as $row): ?>
+                        <tr>
+                            <td><?php echo (int) $row['position']; ?></td>
+                            <td><?php echo h(trim(($row['last_name'] ?? '') . ' ' . ($row['first_name'] ?? ''))); ?></td>
+                            <td><?php echo h($row['total_score'] !== null ? (string) $row['total_score'] : '-'); ?></td>
+                            <td><?php echo h($row['degree_date'] ? date('d/m/Y', strtotime($row['degree_date'])) : '-'); ?></td>
+                            <td><?php echo h($row['degree_grade'] !== null ? (string) $row['degree_grade'] : '-'); ?></td>
+                            <td><?php echo h($row['service_points'] !== null ? (string) $row['service_points'] : '-'); ?></td>
+                            <td><?php echo h($row['application_date'] ? date('d/m/Y', strtotime($row['application_date'])) : '-'); ?></td>
+                            <td><?php echo h($row['birth_date'] ? date('d/m/Y', strtotime($row['birth_date'])) : '-'); ?></td>
+                            <td><?php echo h($row['notes'] ?? '-'); ?></td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
     </section>
 </main>
 

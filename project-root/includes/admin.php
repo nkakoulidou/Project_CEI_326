@@ -22,13 +22,14 @@ function h(?string $value): string
 
 function adminPageStart(string $title): void
 {
+    $resolvedTitle = t($title);
     ?>
     <!DOCTYPE html>
-    <html lang="en">
+    <html lang="<?php echo h(currentLocale()); ?>">
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title><?php echo h($title); ?></title>
+        <title><?php echo h($resolvedTitle); ?></title>
         <link rel="stylesheet" href="<?php echo h(getProjectBasePath() . '/assets/css/style.css'); ?>">
     </head>
     <body>
