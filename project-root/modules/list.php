@@ -29,24 +29,11 @@ $statusLabels = [
             <div class="admin-panel__header">
                 <div>
                     <h1>Track My Applications</h1>
-                    <p>Monitor the progress of your submitted applications and list placements.</p>
+                
                 </div>
             </div>
 
             <section class="candidate-panel-body">
-                <div class="admin-stats-grid candidate-stats-grid">
-                    <article class="admin-stat-card">
-                        <span>Total Applications</span>
-                        <strong><?php echo count($rows); ?></strong>
-                    </article>
-                    <article class="admin-stat-card">
-                        <span>Latest Status</span>
-                        <strong class="admin-stat-card__compact">
-                            <?php echo htmlspecialchars($statusLabels[$rows[0]['current_status'] ?? ''] ?? 'No status', ENT_QUOTES, 'UTF-8'); ?>
-                        </strong>
-                    </article>
-                </div>
-
                 <form class="admin-search" method="get" action="">
                     <input
                         type="text"
