@@ -1,23 +1,65 @@
-CREATE DATABASE IF NOT EXISTS dioristeon;
+CREATE DATABASE IF NOT EXISTS dioristeon
+CHARACTER SET utf8mb4
+COLLATE utf8mb4_unicode_ci;
 
 USE dioristeon;
 
+-- 1. User accounts for login and role-based access.
 CREATE TABLE users (
     id INT AUTO_INCREMENT PRIMARY KEY,
     username VARCHAR(50) NOT NULL UNIQUE,
     email VARCHAR(100) NOT NULL UNIQUE,
     password_hash VARCHAR(255) NOT NULL,
-    role ENUM('admin', 'user') DEFAULT 'user',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    role ENUM('admin', 'user') NOT NULL DEFAULT 'user',
+    status ENUM('active', 'inactive', 'suspended') NOT NULL DEFAULT 'active',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
-CREATE TABLE specialties (
+-- 2. Candidate profile linked to a user account.
+CREATE TABLE candidates (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    name VARCHAR(255) NOT NULL,
+    user_id INT NULL UNIQUE,
+    first_name VARCHAR(50) NOT NULL,
+    last_name VARCHAR(50) NOT NULL,
+    specialty VARCHAR(100),
+    ranking INT DEFAULT NULL,
+    phone VARCHAR(30) DEFAULT NULL,
+    district VARCHAR(100) DEFAULT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT fk_candidates_user
+        FOREIGN KEY (user_id) REFERENCES users(id)
+        ON DELETE CASCADE
+);
+
+CREATE INDEX idx_candidates_name ON candidates (first_name, last_name);
+
+-- 3. Candidate notification preferences.
+CREATE TABLE candidate_preferences (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL UNIQUE,
+    notify_new_lists TINYINT(1) NOT NULL DEFAULT 1,
+    notify_status_changes TINYINT(1) NOT NULL DEFAULT 1,
+    notify_rank_updates TINYINT(1) NOT NULL DEFAULT 0,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT fk_candidate_preferences_user
+        FOREIGN KEY (user_id) REFERENCES users(id)
+        ON DELETE CASCADE
+);
+
+-- 4. Service / category information for each published list.
+CREATE TABLE services (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    service_code VARCHAR(20) NOT NULL UNIQUE,
+    title VARCHAR(150) NOT NULL,
+    category VARCHAR(100) NOT NULL,
+    district VARCHAR(100) NOT NULL,
     description TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+<<<<<<< HEAD
 CREATE TABLE candidates (
     id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT NOT NULL UNIQUE,
@@ -37,58 +79,73 @@ CREATE TABLE candidates (
 
 CREATE INDEX idx_candidate_name ON candidates (first_name, last_name);
 
+=======
+-- 5. Published appointment lists.
+>>>>>>> de9f20ae85e6ec2085512265c907adba990f5331
 CREATE TABLE lists (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    title VARCHAR(255) NOT NULL,
-    year INT NOT NULL,
-    specialty_id INT NOT NULL,
+    service_id INT NOT NULL,
+    academic_year VARCHAR(20) NOT NULL,
+    publication_date DATE NOT NULL,
+    status ENUM('draft', 'published', 'archived') NOT NULL DEFAULT 'draft',
+    notes TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (specialty_id) REFERENCES specialties (id) ON DELETE CASCADE
+    CONSTRAINT fk_lists_service
+        FOREIGN KEY (service_id) REFERENCES services(id)
+        ON DELETE CASCADE
 );
 
+-- 6. Candidate positions inside each list.
 CREATE TABLE list_entries (
     id INT AUTO_INCREMENT PRIMARY KEY,
     list_id INT NOT NULL,
     candidate_id INT NOT NULL,
-    position INT NOT NULL,
-    total_score DECIMAL(6, 2),
-    degree_date DATE,
-    degree_grade DECIMAL(4, 2),
-    service_points DECIMAL(5, 2),
-    application_date DATE,
-    notes VARCHAR(255),
+    rank_position INT NOT NULL,
+    points DECIMAL(6,2) NOT NULL DEFAULT 0.00,
+    status ENUM('active', 'pending', 'appointed', 'removed') NOT NULL DEFAULT 'active',
+    remarks VARCHAR(255) DEFAULT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (list_id) REFERENCES lists (id) ON DELETE CASCADE,
-    FOREIGN KEY (candidate_id) REFERENCES candidates (id) ON DELETE CASCADE,
-    UNIQUE (list_id, candidate_id)
+    CONSTRAINT fk_list_entries_list
+        FOREIGN KEY (list_id) REFERENCES lists(id)
+        ON DELETE CASCADE,
+    CONSTRAINT fk_list_entries_candidate
+        FOREIGN KEY (candidate_id) REFERENCES candidates(id)
+        ON DELETE CASCADE,
+    CONSTRAINT uq_list_candidate UNIQUE (list_id, candidate_id),
+    CONSTRAINT uq_list_rank UNIQUE (list_id, rank_position)
 );
 
-CREATE INDEX idx_list_entries_position ON list_entries (position);
-
-CREATE INDEX idx_list_entries_score ON list_entries (total_score);
-
-CREATE TABLE user_candidate_links (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    user_id INT NOT NULL,
-    candidate_id INT NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
-    FOREIGN KEY (candidate_id) REFERENCES candidates (id) ON DELETE CASCADE,
-    UNIQUE (user_id, candidate_id)
-);
-
+-- 7. Candidate tracking links for "Track Others".
 CREATE TABLE tracked_candidates (
     id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT NOT NULL,
     candidate_id INT NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
-    FOREIGN KEY (candidate_id) REFERENCES candidates (id) ON DELETE CASCADE,
-    UNIQUE (user_id, candidate_id)
+    CONSTRAINT fk_tracked_candidates_user
+        FOREIGN KEY (user_id) REFERENCES users(id)
+        ON DELETE CASCADE,
+    CONSTRAINT fk_tracked_candidates_candidate
+        FOREIGN KEY (candidate_id) REFERENCES candidates(id)
+        ON DELETE CASCADE,
+    CONSTRAINT uq_tracked_candidates_user_candidate UNIQUE (user_id, candidate_id)
 );
 
+-- Optional compatibility table kept for older code/data migrations.
+CREATE TABLE user_candidate_links (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    candidate_id INT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_user_candidate_links_user
+        FOREIGN KEY (user_id) REFERENCES users(id)
+        ON DELETE CASCADE,
+    CONSTRAINT fk_user_candidate_links_candidate
+        FOREIGN KEY (candidate_id) REFERENCES candidates(id)
+        ON DELETE CASCADE,
+    CONSTRAINT uq_user_candidate_links_user_candidate UNIQUE (user_id, candidate_id)
+);
 
-
+-- 8. Application records used by "Track My Applications".
 CREATE TABLE applications (
     id INT AUTO_INCREMENT PRIMARY KEY,
     candidate_id INT NOT NULL,
@@ -96,7 +153,25 @@ CREATE TABLE applications (
     application_code VARCHAR(30) NOT NULL UNIQUE,
     submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     current_status ENUM('submitted', 'under_review', 'approved', 'rejected', 'appointed') NOT NULL DEFAULT 'submitted',
-    timeline_note VARCHAR(255),
-    FOREIGN KEY (candidate_id) REFERENCES candidates(id) ON DELETE CASCADE,
-    FOREIGN KEY (list_id) REFERENCES lists(id) ON DELETE CASCADE
+    timeline_note VARCHAR(255) DEFAULT NULL,
+    CONSTRAINT fk_applications_candidate
+        FOREIGN KEY (candidate_id) REFERENCES candidates(id)
+        ON DELETE CASCADE,
+    CONSTRAINT fk_applications_list
+        FOREIGN KEY (list_id) REFERENCES lists(id)
+        ON DELETE CASCADE
+);
+
+-- 9. Simple audit trail for admin actions.
+CREATE TABLE activity_logs (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    action_type VARCHAR(50) NOT NULL,
+    entity_type VARCHAR(50) NOT NULL,
+    entity_id INT DEFAULT NULL,
+    description VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_activity_logs_user
+        FOREIGN KEY (user_id) REFERENCES users(id)
+        ON DELETE CASCADE
 );
